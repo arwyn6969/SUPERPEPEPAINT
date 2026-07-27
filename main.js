@@ -13,12 +13,6 @@
  * License: MIT License
  */
 
-/**
- * NOTES:
- * console log help and change settings within console
- * inc/dec for hue, brightness, saturation, opacity,
- */
-
 ////////////////////
 //      NAV       //
 ////////////////////
@@ -56,6 +50,10 @@ function getRandomFloat(min, max, decimals = 3) {
 	const value = Math.random() * (max - min) + min;
 	const factor = Math.pow(10, decimals);
 	return Math.round(value * factor) / factor;
+}
+
+function getRandomBoolean(chance = 0.5) {
+	return Math.random() < chance;
 }
 
 const feedback_dialog = document.getElementById("feedback_dialog");
@@ -195,147 +193,6 @@ const clampPct = (p) => Math.max(0, Math.min(100, p));
 /////////////////////
 //     COLOURS     //
 /////////////////////
-let color_palette_seed_all = [
-	"#000000", // black
-	"#FFFFFF", // white
-	"#FF0000", // red
-	"#00FF00", // lime
-	"#0000FF", // blue
-	"#FFFF00", // yellow
-	"#00FFFF", // cyan/aqua
-	"#FF00FF", // magenta/fuchsia
-	"#C0C0C0", // silver
-	"#808080", // gray/grey
-	"#800000", // maroon
-	"#808000", // olive
-	"#008000", // green
-	"#800080", // purple
-	"#008080", // teal
-	"#000080", // navy
-	"#F0F8FF", // aliceblue
-	"#FAEBD7", // antiquewhite
-	"#7FFFD4", // aquamarine
-	"#F0FFFF", // azure
-	"#F5F5DC", // beige
-	"#FFE4C4", // bisque
-	"#FFEBCD", // blanchedalmond
-	"#8A2BE2", // blueviolet
-	"#A52A2A", // brown
-	"#DEB887", // burlywood
-	"#5F9EA0", // cadetblue
-	"#7FFF00", // chartreuse
-	"#D2691E", // chocolate
-	"#FF7F50", // coral
-	"#6495ED", // cornflowerblue
-	"#FFF8DC", // cornsilk
-	"#DC143C", // crimson
-	"#00008B", // darkblue
-	"#008B8B", // darkcyan
-	"#B8860B", // darkgoldenrod
-	"#A9A9A9", // darkgray
-	"#006400", // darkgreen
-	"#BDB76B", // darkkhaki
-	"#8B008B", // darkmagenta
-	"#556B2F", // darkolivegreen
-	"#FF8C00", // darkorange
-	"#9932CC", // darkorchid
-	"#8B0000", // darkred
-	"#E9967A", // darksalmon
-	"#8FBC8F", // darkseagreen
-	"#483D8B", // darkslateblue
-	"#2F4F4F", // darkslategray
-	"#00CED1", // darkturquoise
-	"#9400D3", // darkviolet
-	"#FF1493", // deeppink
-	"#00BFFF", // deepskyblue
-	"#696969", // dimgray
-	"#1E90FF", // dodgerblue
-	"#B22222", // firebrick
-	"#FFFAF0", // floralwhite
-	"#228B22", // forestgreen
-	"#DCDCDC", // gainsboro
-	"#F8F8FF", // ghostwhite
-	"#FFD700", // gold
-	"#DAA520", // goldenrod
-	"#ADFF2F", // greenyellow
-	"#F0FFF0", // honeydew
-	"#FF69B4", // hotpink
-	"#CD5C5C", // indianred
-	"#4B0082", // indigo
-	"#FFFFF0", // ivory
-	"#F0E68C", // khaki
-	"#E6E6FA", // lavender
-	"#FFF0F5", // lavenderblush
-	"#7CFC00", // lawngreen
-	"#FFFACD", // lemonchiffon
-	"#ADD8E6", // lightblue
-	"#F08080", // lightcoral
-	"#E0FFFF", // lightcyan
-	"#FAFAD2", // lightgoldenrodyellow
-	"#D3D3D3", // lightgray
-	"#90EE90", // lightgreen
-	"#FFB6C1", // lightpink
-	"#FFA07A", // lightsalmon
-	"#20B2AA", // lightseagreen
-	"#87CEFA", // lightskyblue
-	"#778899", // lightslategray
-	"#B0C4DE", // lightsteelblue
-	"#FFFFE0", // lightyellow
-	"#32CD32", // limegreen
-	"#FAF0E6", // linen
-	"#66CDAA", // mediumaquamarine
-	"#0000CD", // mediumblue
-	"#BA55D3", // mediumorchid
-	"#9370DB", // mediumpurple
-	"#3CB371", // mediumseagreen
-	"#7B68EE", // mediumslateblue
-	"#00FA9A", // mediumspringgreen
-	"#48D1CC", // mediumturquoise
-	"#C71585", // mediumvioletred
-	"#191970", // midnightblue
-	"#F5FFFA", // mintcream
-	"#FFE4E1", // mistyrose
-	"#FFE4B5", // moccasin
-	"#FFDEAD", // navajowhite
-	"#FDF5E6", // oldlace
-	"#6B8E23", // olivedrab
-	"#FFA500", // orange
-	"#FF4500", // orangered
-	"#DA70D6", // orchid
-	"#EEE8AA", // palegoldenrod
-	"#98FB98", // palegreen
-	"#AFEEEE", // paleturquoise
-	"#DB7093", // palevioletred
-	"#FFEFD5", // papayawhip
-	"#FFDAB9", // peachpuff
-	"#CD853F", // peru
-	"#FFC0CB", // pink
-	"#DDA0DD", // plum
-	"#B0E0E6", // powderblue
-	"#BC8F8F", // rosybrown
-	"#4169E1", // royalblue
-	"#8B4513", // saddlebrown
-	"#FA8072", // salmon
-	"#F4A460", // sandybrown
-	"#2E8B57", // seagreen
-	"#FFF5EE", // seashell
-	"#A0522D", // sienna
-	"#87CEEB", // skyblue
-	"#6A5ACD", // slateblue
-	"#708090", // slategray
-	"#FFFAFA", // snow
-	"#00FF7F", // springgreen
-	"#4682B4", // steelblue
-	"#D2B48C", // tan
-	"#D8BFD8", // thistle
-	"#FF6347", // tomato
-	"#40E0D0", // turquoise
-	"#EE82EE", // violet
-	"#F5DEB3", // wheat
-	"#F5F5F5", // whitesmoke
-	"#9ACD32", // yellowgreen
-];
-
 const color_palette_seed_gradients = [
 	// Reds gradient
 	"#ffcccc",
@@ -995,6 +852,10 @@ let randomiser_brush_size_on = true;
 let randomiser_brush_size_min = 10;
 let randomiser_brush_size_max = 300;
 
+// Hard limits for the brush size selected by randAll().
+let brush_size_rand_min = 10;
+let brush_size_rand_max = 300;
+
 // Drawing speed
 let drawing_speed_on = false;
 let drawing_frame_count = 0;
@@ -1238,6 +1099,7 @@ let watercolor_wetness = 0.45;
 let watercolor_pigment = 0.18;
 let watercolor_granulation = 0.3;
 let watercolor_bleed = 6;
+let watercolor_blendmode = "multiply";
 let last_watercolor_deposit = null;
 const watercolor_melt_canvas = document.createElement("canvas");
 const watercolor_melt_ctx = watercolor_melt_canvas.getContext("2d");
@@ -1266,6 +1128,17 @@ function setBrushBlendMode(mode) {
 	return true;
 }
 
+function setWatercolorBlendMode(mode) {
+	const next_mode = normalizeBlendMode(mode);
+	if (!supported_blend_modes.has(next_mode)) {
+		console.warn(`Unsupported watercolor blend mode: ${mode}`);
+		return false;
+	}
+
+	watercolor_blendmode = next_mode;
+	return true;
+}
+
 function setBrushBlendEnabled(enabled) {
 	blend_on = Boolean(enabled);
 	if (typeof draw_ctx !== "undefined") {
@@ -1287,13 +1160,22 @@ function setSlidersAndInputs() {
 	syncBrushSizeInputs();
 
 	// IMAGE
-	setTimeout(() => {
-		let image_radio = document.getElementById(`image_brush_${image_index}`);
+	const syncImageRadio = () => {
+		const image_radio = document.getElementById(`image_brush_${image_index}`);
 		if (image_radio) {
 			image_radio.checked = true;
+			return true;
 		}
-	}, 2000);
-	document.getElementById("image_opacity_input_range").value = image_opacity;
+		return false;
+	};
+	if (!syncImageRadio()) {
+		setTimeout(syncImageRadio, 0);
+	}
+
+	const image_opacity_input = document.getElementById("image_opacity_input_range");
+	if (image_opacity_input) {
+		image_opacity_input.value = image_opacity;
+	}
 }
 
 setSlidersAndInputs();
@@ -1301,181 +1183,122 @@ setSlidersAndInputs();
 //////////////////////////
 //      RANDOMIZER      //
 //////////////////////////
-function randIndividual(type_to_randomise) {
-	// BEHAVIOURS
-	if (type_to_randomise == "size") {
-		randomise_lock_width_and_height = Math.random() < 0.5;
-		randomise_width = Math.random() < 0.5;
-		random_walker_width = Math.random() < 0.5;
-		randomise_width_range = getRandomInt(1, Math.abs(brush_width));
-		randomise_width_speed = getRandomInt(1, 10);
-		randomise_width_easing = getRandomFloat(0, 1);
-
-		randomise_height = Math.random() < 0.5;
-		random_walker_height = Math.random() < 0.5;
-		randomise_height_range = getRandomInt(1, Math.abs(brush_height));
-		randomise_height_speed = getRandomInt(1, 10);
-		randomise_height_easing = getRandomFloat(0, 1);
-
-		let current_width = getCurrentBrushSize();
-		brush_width_random = new RandomWalker(
-			current_width,
-			current_width - randomise_width_range,
-			current_width + randomise_width_range,
-			randomise_width_speed,
-			randomise_width_easing,
-			random_walker_width,
-		);
-		let current_height = getCurrentBrushSize();
-		brush_height_random = new RandomWalker(
-			current_height,
-			current_height - randomise_height_range,
-			current_height + randomise_height_range,
-			randomise_height_speed,
-			randomise_height_easing,
-			random_walker_height,
-		);
-	} else if (type_to_randomise == "follow") {
-		smoothing_factor = getRandomFloat(0, 1);
-	} else if (type_to_randomise == "rotate") {
-		manual_inc_rotate = 10;
-		rotate_angle = getRandomInt(0, 359);
-		rotate_angle_rads = rotate_angle * (Math.PI / 180);
-		rotate_speed = parseFloat(getRandomInt(1, 1000) / 100);
-		auto_rotate = Math.random() < 0.5;
-		origin_x = getRandomInt(0, window_w / 2);
-		origin_y = getRandomInt(0, window_h / 2);
-		flip_brush_h = Math.random() < 0.5;
-		flip_brush_v = Math.random() < 0.5;
-	} else if (type_to_randomise == "mirror") {
-		mirror_reflections = getRandomInt(2, 8);
-		mirror_angle_degrees = getRandomInt(0, 359);
-		mirror_angle_rads = (mirror_angle_degrees * Math.PI) / 180; // Convert to radians;
-		mirror_origin = getMirrorOrigin();
-	} else if (type_to_randomise == "snap") {
-		snap_x = getRandomInt(2, 20);
-		snap_y = getRandomInt(2, 20);
-	} else if (type_to_randomise == "increment") {
-		auto_inc_x_amount = getRandomInt(-20, 20);
-		auto_inc_y_amount = getRandomInt(-20, 20);
-		increment_screen_wrap_on = Math.random() < 0.5;
-		wave_on = Math.random() < 0.5;
-		x_amp = getRandomInt(1, 100);
-		x_freq = getRandomFloat(0, 0.1);
-		y_amp = getRandomInt(1, 100);
-		y_freq = getRandomFloat(0, 0.1);
-	} else if (type_to_randomise == "fx") {
-		hue_rotate_on = Math.random() < 0.5;
-		hue_rotate_amount = getRandomInt(1, 359);
-		auto_hue_rotate_on = Math.random() < 0.5;
-		auto_hue_increment_amount = getRandomInt(1, 359);
-
-		blur_on = Math.random() < 0.5;
-		blur_amount = getRandomInt(1, 10);
-
-		brightness_on = Math.random() < 0.5;
-		brightness_amount = getRandomInt(1, 100);
-		brightness_auto_increment_on = Math.random() < 0.5;
-		brightness_auto_increment_amount = getRandomInt(1, 50);
-		brightness_ping_pong_on = Math.random() < 0.5;
-
-		saturate_on = Math.random() < 0.5;
-		saturate_amount = getRandomInt(1, 100);
-		saturate_auto_increment_on = Math.random() < 0.5;
-		saturate_auto_increment_amount = getRandomInt(1, 50);
-		saturate_ping_pong_on = Math.random() < 0.5;
-
-		opacity_on = Math.random() < 0.5;
-		opacity_amount = getRandomInt(0, 100);
-		opacity_auto_increment_on = Math.random() < 0.5;
-		opacity_auto_increment_amount = getRandomInt(1, 50);
-		opacity_ping_pong_on = Math.random() < 0.5;
-
-		drop_shadow_on = Math.random() < 0.5;
-		drop_shadow_color = getColor(); // getRandomHexColor();
-		drop_shadow_color_rgb = hexToRgba(drop_shadow_color);
-		drop_shadow_x_amount = getRandomInt(-100, 100);
-		drop_shadow_y_amount = getRandomInt(-100, 100);
-		drop_shadow_blur_amount = getRandomInt(2, 12);
-
-		invert_on = Math.random() < 0.5;
-		invert_amount = getRandomInt(0, 100);
-		invert_auto_increment_on = Math.random() < 0.5;
-		invert_auto_increment_amount = getRandomInt(1, 50);
-		invert_ping_pong_on = Math.random() < 0.5;
-	} else if (type_to_randomise == "blend") {
-		const blend_options = [
-			"source-atop",
-			"destination-over",
-			"destination-out",
-			"lighter",
-			"xor",
-			"multiply",
-			"screen",
-			"overlay",
-			"darken",
-			"lighten",
-			"color-dodge",
-			"color-burn",
-			"hard-light",
-			"soft-light",
-			"difference",
-			"exclusion",
-			"hue",
-			"saturation",
-			"color",
-			"luminosity",
-		];
-		setBrushBlendMode(blend_options[Math.floor(Math.random() * blend_options.length)]);
-	} else if (type_to_randomise == "watercolor") {
-		watercolor_wetness = getRandomFloat(0.2, 0.8);
-		watercolor_pigment = getRandomFloat(0.08, 0.35);
-		watercolor_granulation = getRandomFloat(0.1, 0.75);
-		watercolor_bleed = getRandomInt(2, 12);
-	}
-
-	// BRUSHES
-	else if (type_to_randomise == "image") {
-		image_opacity = getRandomInt(0, 100);
-		image_index = getRandomInt(0, image_array.length - 1);
-		image_is_ellipse = Math.random() < 0.5;
-	}
-
-	setSlidersAndInputs();
-}
 
 function randAll() {
-	image_opacity = getRandomInt(0, 100);
-	image_index = getRandomInt(0, image_array.length - 1);
+	// Brush and image. Pick the image first because its aspect ratio determines
+	// the largest brush that can fit completely within the canvas.
+	brush_type = "image";
+	if (image_array.length > 0) {
+		image_index = getRandomInt(0, image_array.length - 1);
+	}
+	image_opacity = getRandomInt(20, 100);
+	brush_size_increment_x = getRandomInt(1, 8);
+	brush_size_increment_y = getRandomInt(1, 8);
 
-	if (randomiser_behaviour_type_on) {
-		setBrushSizeAutomation(Math.random() < 0.2);
-		rotate_on = Math.random() < 0.2;
-		mirror_on = Math.random() < 0.2;
-		snap_on = Math.random() < 0.2;
-		increment_on = Math.random() < 0.2;
-		blend_on = Math.random() < 0.2;
-		fx_on = Math.random() < 0.2;
-		follow_brush_direction = Math.random() < 0.2;
-		watercolor_on = Math.random() < 0.2;
+	const aspect_ratio = Math.max(0.01, getActiveBrushAspectRatio());
+	const max_brush_height = Math.max(1, Math.floor(Math.min(window_h, window_w / aspect_ratio)));
+	const configured_brush_size_min = Math.max(1, Math.ceil(Math.min(brush_size_rand_min, brush_size_rand_max)));
+	const configured_brush_size_max = Math.max(configured_brush_size_min, Math.floor(Math.max(brush_size_rand_min, brush_size_rand_max)));
+	const rand_brush_size_max = Math.max(configured_brush_size_min, Math.min(configured_brush_size_max, max_brush_height));
+	setBrushSizeFromHeight(getRandomInt(configured_brush_size_min, rand_brush_size_max));
+
+	if (brush_size_automation_on) {
+		brush_size_before_automation = {
+			width: brush_width,
+			height: brush_height,
+			width_float: brush_width_float,
+			height_float: brush_height_float,
+		};
 	}
 
-	if (randomiser_behaviour_settings_on) {
-		const behaviour_options = ["size", "follow", "rotate", "mirror", "snap", "increment", "fx", "blend", "watercolor"];
+	// Randomiser and drawing cadence.
+	randomiser_brush_size_min = getRandomInt(1, Math.max(1, brush_height));
+	randomiser_brush_size_max = getRandomInt(randomiser_brush_size_min, max_brush_height);
+	// drawing_speed = getRandomInt(1, 8);
 
-		behaviour_options.forEach((behaviour_option) => {
-			randIndividual(behaviour_option);
-		});
-	}
+	// Size automation parameters. Keep every walker inside its matching canvas dimension.
+	const width_room = Math.max(0, Math.floor(Math.min(brush_width - 1, window_w - brush_width)));
+	const height_room = Math.max(0, Math.floor(Math.min(brush_height - 1, window_h - brush_height)));
+	randomise_width_range = getRandomInt(0, width_room);
+	randomise_height_range = getRandomInt(0, height_room);
+	randomise_width_speed = getRandomFloat(0.5, 7, 2);
+	randomise_height_speed = getRandomFloat(0.5, 7, 2);
+	randomise_width_easing = getRandomFloat(0.15, 1, 2);
+	randomise_height_easing = getRandomFloat(0.15, 1, 2);
 
-	if (randomiser_brush_size_on) {
-		if (randomiser_brush_size_min < 1) {
-			randomiser_brush_size_min = 1;
-		}
-		setBrushSizeFromHeight(getRandomInt(randomiser_brush_size_min, randomiser_brush_size_max));
-	}
+	// Follow and rotation.
+	smoothing_factor = getRandomFloat(0.1, 0.9, 2);
+	manual_inc_rotate = getRandomInt(1, 45);
+	// rotate_angle = getRandomInt(-180, 180);
+	// rotate_angle_rads = rotate_angle * (Math.PI / 180);
+	rotate_speed = getRandomFloat(-8, 8, 2);
+	// origin_x = getRandomInt(-Math.floor(brush_width / 2), Math.floor(brush_width / 2));
+	// origin_y = getRandomInt(-Math.floor(brush_height / 2), Math.floor(brush_height / 2));
+
+	// Mirror, snap, increment, and wave.
+	mirror_reflections = [2, 3, 4, 5, 6, 7, 8][getRandomInt(0, 6)];
+	mirror_origin_x = getRandomInt(0, 100);
+	mirror_origin_y = getRandomInt(0, 100);
+	mirror_angle_degrees = getRandomInt(0, 359);
+	mirror_angle_rads = (mirror_angle_degrees * Math.PI) / 180;
+	mirror_origin = getMirrorOrigin();
+
+	// snap_x = getRandomInt(1, Math.max(1, Math.min(window_w, Math.round(brush_width))));
+	// snap_y = getRandomInt(1, Math.max(1, Math.min(window_h, Math.round(brush_height))));
+
+	auto_inc_x_amount = getRandomInt(-20, 20);
+	auto_inc_y_amount = getRandomInt(-20, 20);
+	auto_inc_x_running = 0;
+	auto_inc_y_running = 0;
+	x_amp = getRandomInt(0, Math.floor(window_w / 3));
+	y_amp = getRandomInt(0, Math.floor(window_h / 3));
+	x_freq = getRandomFloat(0.005, 0.15, 3);
+	y_freq = getRandomFloat(0.005, 0.15, 3);
+	x_phase = getRandomFloat(0, Math.PI * 2, 3);
+	y_phase = getRandomFloat(0, Math.PI * 2, 3);
+
+	// Per-stamp CSS effects.
+	hue_rotate_amount = getRandomInt(0, 359);
+	auto_hue_increment_amount = getRandomFloat(-15, 15, 2);
+	brightness_amount = getRandomInt(40, 180);
+	brightness_auto_increment_amount = getRandomFloat(0.1, 5, 2);
+	brightness_ping_pong_direction = getRandomBoolean() ? 1 : -1;
+	saturate_amount = getRandomInt(0, 250);
+	saturate_auto_increment_amount = getRandomFloat(0.1, 6, 2);
+	saturate_ping_pong_direction = getRandomBoolean() ? 1 : -1;
+	opacity_amount = getRandomInt(20, 100);
+	opacity_auto_increment_amount = getRandomFloat(0.1, 3, 2);
+	opacity_ping_pong_direction = getRandomBoolean() ? 1 : -1;
+	invert_amount = getRandomInt(0, 100);
+	invert_auto_increment_amount = getRandomFloat(0.1, 5, 2);
+	invert_ping_pong_direction = getRandomBoolean() ? 1 : -1;
+	blur_amount = getRandomFloat(0, 12, 1);
+	drop_shadow_color = getRandomHexColor();
+	drop_shadow_color_rgb = hexToRgba(drop_shadow_color);
+	drop_shadow_x_amount = getRandomInt(-30, 30);
+	drop_shadow_y_amount = getRandomInt(-30, 30);
+	drop_shadow_blur_amount = getRandomInt(0, 20);
+
+	// Blend and watercolor.
+	const blend_modes = Array.from(supported_blend_modes).filter((mode) => mode !== "copy");
+	blend_mode = blend_modes[getRandomInt(0, blend_modes.length - 1)];
+	watercolor_wetness = getRandomFloat(0.1, 1, 2);
+	watercolor_pigment = getRandomFloat(0.1, 1, 2);
+	watercolor_granulation = getRandomFloat(0, 1, 2);
+	watercolor_bleed = getRandomFloat(0, 12, 1);
+	last_watercolor_deposit = null;
+
+	// tint_r = getRandomInt(0, 255);
+	// tint_g = getRandomInt(0, 255);
+	// tint_b = getRandomInt(0, 255);
+
+	initRandomWalkers();
+	setFilters();
+	setBlendMode(draw_ctx);
+	updateFxButtonStates();
 
 	setSlidersAndInputs();
+	showFeedbackNotification("Rand()");
 }
 
 /////////////////////////////
@@ -1693,7 +1516,8 @@ document.addEventListener("keyup", (e) => {
 			watercolor_wetness: ${watercolor_wetness},
 			watercolor_pigment: ${watercolor_pigment},
 			watercolor_granulation: ${watercolor_granulation},
-			watercolor_bleed: ${watercolor_bleed}`);
+			watercolor_bleed: ${watercolor_bleed},
+			watercolor_blendmode: ${watercolor_blendmode}`);
 	} else if (e.key === "0") {
 		blend_on = false;
 		fx_on = false;
@@ -1766,7 +1590,7 @@ document.addEventListener("keyup", (e) => {
 		console.log(`animated glitch applied,
 			animation_speed: ${window.animation_speed},
 			glitch_pixel_size: ${window.glitch_pixel_size},
-			canvas_glitch_amount: ${window.canvas_glitch_amount}`);
+			glitch_amount: ${window.glitch_amount}`);
 	} else if (e.key === "k") {
 		animatedVhs();
 		showEffectToggleNotification("Animated VHS", window.animated_vhs_on);
@@ -1901,21 +1725,21 @@ class RandomWalker {
 }
 
 function initRandomWalkers() {
-	let current_width = getCurrentBrushSize();
+	const current_width = brush_width;
 	brush_width_random = new RandomWalker(
 		current_width,
-		current_width - randomise_width_range,
-		current_width + randomise_width_range,
+		Math.max(1, current_width - randomise_width_range),
+		Math.min(window_w, current_width + randomise_width_range),
 		randomise_width_speed,
 		randomise_width_easing,
 		random_walker_width,
 	);
 
-	let current_height = getCurrentBrushSize();
+	const current_height = brush_height;
 	brush_height_random = new RandomWalker(
 		current_height,
-		current_height - randomise_height_range,
-		current_height + randomise_height_range,
+		Math.max(1, current_height - randomise_height_range),
+		Math.min(window_h, current_height + randomise_height_range),
 		randomise_height_speed,
 		randomise_height_easing,
 		random_walker_height,
@@ -1991,17 +1815,7 @@ function softenCanvasUnderWatercolor(ctx, px, py) {
 	watercolor_melt_ctx.globalCompositeOperation = "source-over";
 	watercolor_melt_ctx.filter = "none";
 	watercolor_melt_ctx.clearRect(0, 0, source_width, source_height);
-	watercolor_melt_ctx.drawImage(
-		ctx.canvas,
-		source_x,
-		source_y,
-		source_width,
-		source_height,
-		0,
-		0,
-		source_width,
-		source_height,
-	);
+	watercolor_melt_ctx.drawImage(ctx.canvas, source_x, source_y, source_width, source_height, 0, 0, source_width, source_height);
 
 	ctx.save();
 	ctx.globalAlpha *= watercolor_wetness * 0.2;
@@ -2020,7 +1834,7 @@ function drawWatercolorToCanvas(ctx, px, py, reflectX = false, reflectY = false,
 	const layer_count = Math.round(3 + granulation * 4);
 	const spread = Math.max(1, Math.min(Math.abs(brush_width), Math.abs(brush_height)) * (0.025 + granulation * 0.08));
 	const layer_alpha = (pigment * 1.5) / layer_count;
-	const composite_operation = blend_on ? blend_mode : "multiply";
+	const composite_operation = blend_on ? blend_mode : watercolor_blendmode;
 
 	for (let layer = 0; layer < layer_count; layer++) {
 		const angle = Math.random() * Math.PI * 2;
@@ -2092,6 +1906,7 @@ let image_brush_array = [
 	"pepe18",
 	"pepe19",
 	"turtle",
+	"sanicpepe",
 	"groyper1",
 	"groyper2",
 	"groyper3",
@@ -2121,6 +1936,7 @@ let image_brush_array = [
 	"cheems",
 	"doge1",
 	"swoledoge",
+	"firedog",
 	"chad1",
 	"chad2",
 	"chad3",
@@ -2129,7 +1945,6 @@ let image_brush_array = [
 	"face3",
 	"face4",
 	"fist1",
-	"girlrunning",
 	"gondola1",
 	"gondola2",
 	"knuckles2",
@@ -2147,6 +1962,7 @@ let image_brush_array = [
 	"wifejak1",
 	"wifejakpepe",
 	"trad",
+	"doomer",
 	"wojak2",
 	"wojak3",
 	"wojak4",
@@ -2983,6 +2799,23 @@ const exposeNumberSetting = (name, getter, setter) =>
 	});
 
 exposeNumberSetting(
+	"brush_width",
+	() => brush_width,
+	(value) => {
+		brush_width = value;
+		brush_width_float = value;
+	},
+);
+exposeNumberSetting(
+	"brush_height",
+	() => brush_height,
+	(value) => {
+		brush_height = value;
+		brush_height_float = value;
+		syncBrushSizeInputs();
+	},
+);
+exposeNumberSetting(
 	"brush_size_increment_x",
 	() => brush_size_increment_x,
 	(value) => (brush_size_increment_x = value),
@@ -3032,6 +2865,16 @@ exposeNumberSetting(
 	"randomiser_brush_size_max",
 	() => randomiser_brush_size_max,
 	(value) => (randomiser_brush_size_max = value),
+);
+exposeNumberSetting(
+	"brush_size_rand_min",
+	() => brush_size_rand_min,
+	(value) => (brush_size_rand_min = value),
+);
+exposeNumberSetting(
+	"brush_size_rand_max",
+	() => brush_size_rand_max,
+	(value) => (brush_size_rand_max = value),
 );
 exposeBooleanSetting(
 	"drawing_speed_on",
@@ -3472,6 +3315,7 @@ exposeNumberSetting(
 	() => watercolor_bleed,
 	(value) => (watercolor_bleed = Math.max(0, value)),
 );
+exposeConsoleSetting("watercolor_blendmode", () => watercolor_blendmode, setWatercolorBlendMode);
 
 exposeConsoleSetting("blend_mode", () => blend_mode, setBrushBlendMode);
 exposeBooleanSetting("blend_on", () => blend_on, setBrushBlendEnabled);
