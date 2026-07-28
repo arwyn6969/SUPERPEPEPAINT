@@ -1065,14 +1065,9 @@ let blur_amount = 4;
 let blend_on = false;
 let blend_mode = "difference";
 const supported_blend_modes = new Set([
-	"source-over",
-	"source-in",
-	"source-out",
 	"source-atop",
 	"destination-over",
-	"destination-in",
 	"destination-out",
-	"destination-atop",
 	"lighter",
 	"copy",
 	"xor",

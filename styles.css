@@ -44,6 +44,20 @@ body::-webkit-scrollbar {
 	height: 560px;
 }
 
+/*
+ * Chrome DevTools uses this class when H hides the selected node in the
+ * Elements panel. Keep an accidental DevTools shortcut from hiding the card
+ * or any of its canvases while testing PEPEPAINT's own keyboard shortcuts.
+ */
+.__web-inspector-hide-shortcut__ #card,
+.__web-inspector-hide-shortcut__ #card *,
+#card.__web-inspector-hide-shortcut__,
+#card.__web-inspector-hide-shortcut__ *,
+#card .__web-inspector-hide-shortcut__,
+#card .__web-inspector-hide-shortcut__ * {
+	visibility: visible !important;
+}
+
 #nav_container {
 	position: absolute;
 	top: 0;
