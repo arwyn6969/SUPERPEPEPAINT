@@ -1,3 +1,12 @@
+import {
+	calculateChaos,
+	calculateDuration,
+	calculatePepeness,
+	createDistanceTravelledTrait,
+	createNumberOfStrokesTrait,
+	createVarietyTrait,
+} from "./traits.js";
+
 // It's PEPEPAINT v1 first uploaded on 7th Oct 2025
 
 /**
@@ -18,9 +27,13 @@
 ////////////////////
 
 const submission_button = document.getElementById("submission_button");
+const new_canvas_button = document.getElementById("new_canvas_button");
 const submission_dialog = document.getElementById("submission_dialog");
+const submission_form = document.getElementById("submission_form");
+const submission_status = document.getElementById("submission_status");
 const submission_close_button = document.getElementById("submission_close_button");
 const submission_cancel_button = document.getElementById("submission_cancel_button");
+let latest_submission_traits = null;
 
 submission_button?.addEventListener("click", () => {
 	if (!submission_dialog.open) {
@@ -28,8 +41,42 @@ submission_button?.addEventListener("click", () => {
 	}
 });
 
+new_canvas_button?.addEventListener("click", async () => {
+	const should_start_new = window.confirm("Start a new canvas? Your current locally saved canvas will be cleared.");
+	if (should_start_new) {
+		await resetCanvas();
+	}
+});
+
 [submission_close_button, submission_cancel_button].forEach((button) => {
 	button?.addEventListener("click", () => submission_dialog.close());
+});
+
+submission_form?.addEventListener("submit", (event) => {
+	event.preventDefault();
+
+	try {
+		const submission_canvas = createFlattenedCanvas();
+		const submitted_at = Date.now();
+		latest_submission_traits = {
+			pepeness: calculatePepeness(submission_canvas),
+			chaos: calculateChaos(submission_canvas),
+			number_of_strokes: createNumberOfStrokesTrait(number_of_strokes),
+			variety: createVarietyTrait(brush_usage),
+			duration: calculateDuration(artwork_started_at, submitted_at),
+			distance_travelled: createDistanceTravelledTrait(pointer_distance_travelled, draw_canvas.width, draw_canvas.height),
+		};
+
+		console.info("PEPEPAINT submission traits", latest_submission_traits);
+		if (submission_status) {
+			submission_status.textContent = `Status: Traits prepared — PEPENESS ${latest_submission_traits.pepeness.value}% · CHAOS ${latest_submission_traits.chaos.value}% · STROKES ${latest_submission_traits.number_of_strokes.value} · VARIETY ${latest_submission_traits.variety.value} · DURATION ${latest_submission_traits.duration.formatted} · DISTANCE ${latest_submission_traits.distance_travelled.formatted} (backend not connected)`;
+		}
+	} catch (error) {
+		console.error("PEPEPAINT could not calculate submission traits.", error);
+		if (submission_status) {
+			submission_status.textContent = "Status: Could not calculate submission traits";
+		}
+	}
 });
 
 /////////////////////
@@ -1224,11 +1271,7 @@ function randAll() {
 	// Follow and rotation.
 	smoothing_factor = getRandomFloat(0.1, 0.9, 2);
 	manual_inc_rotate = getRandomInt(1, 45);
-	// rotate_angle = getRandomInt(-180, 180);
-	// rotate_angle_rads = rotate_angle * (Math.PI / 180);
 	rotate_speed = getRandomFloat(-8, 8, 2);
-	// origin_x = getRandomInt(-Math.floor(brush_width / 2), Math.floor(brush_width / 2));
-	// origin_y = getRandomInt(-Math.floor(brush_height / 2), Math.floor(brush_height / 2));
 
 	// Mirror, snap, increment, and wave.
 	mirror_reflections = [2, 3, 4, 5, 6, 7, 8][getRandomInt(0, 6)];
@@ -1273,6 +1316,17 @@ function randAll() {
 	drop_shadow_x_amount = getRandomInt(-30, 30);
 	drop_shadow_y_amount = getRandomInt(-30, 30);
 	drop_shadow_blur_amount = getRandomInt(0, 20);
+
+	// Canvas filter parameters exposed by filters.js.
+	window.posterize_levels_amount = getRandomInt(2, 4);
+	window.dither_pixel_size = getRandomInt(1, 6);
+	window.emboss_pixel_size_amount = getRandomInt(1, 4);
+	window.edge_pixel_size_amount = getRandomInt(1, 4);
+	window.pixelate_amount = getRandomInt(2, 4);
+	window.glitch_pixel_size = getRandomInt(2, 20);
+	window.glitch_amount = getRandomInt(2, 10);
+	window.wave_amplitude = getRandomInt(1, 12);
+	window.wave_frequency = getRandomInt(2, 10);
 
 	// Blend and watercolor.
 	const blend_modes = Array.from(supported_blend_modes).filter((mode) => mode !== "copy");
@@ -1356,16 +1410,20 @@ document.addEventListener("keydown", (e) => {
 		stepManualRotate(1);
 	} else if (e.key == "f") {
 		is_x_holding = true;
+		console.log("Holding x axis");
 	} else if (e.key == "v") {
 		is_y_holding = true;
+		console.log("Holding y axis");
 	} else if (e.key === "z" && draw_canvas) {
 		layerUndo();
 	} else if (e.key === "x" && draw_canvas) {
 		layerRedo();
 	} else if (e.key === "g") {
 		flip_brush_h = true;
+		console.log("Brush flipped horizontal");
 	} else if (e.key === "b") {
 		flip_brush_v = true;
+		console.log("Brush flipped vertical");
 	}
 });
 
@@ -2157,12 +2215,282 @@ draw_canvas.style.opacity = draw_canvas_data.opacity;
 preview_ctx.lineJoin = "miter";
 preview_ctx.lineCap = "butt";
 
+let brush_usage = Object.create(null);
+
+function cloneBrushUsage(source = brush_usage) {
+	const clone = Object.create(null);
+	if (!source || typeof source !== "object" || Array.isArray(source)) {
+		return clone;
+	}
+
+	for (const [brush_name, stroke_count] of Object.entries(source)) {
+		if (brush_name.length > 0 && Number.isSafeInteger(stroke_count) && stroke_count > 0) {
+			clone[brush_name] = stroke_count;
+		}
+	}
+	return clone;
+}
+
+function restoreBrushUsage(source) {
+	brush_usage = cloneBrushUsage(source);
+}
+
+function recordCurrentBrushUsage() {
+	const brush_name = image_brush_array[Number.parseInt(image_index, 10)];
+	if (typeof brush_name !== "string" || brush_name.length === 0) {
+		return;
+	}
+
+	brush_usage[brush_name] = (brush_usage[brush_name] || 0) + 1;
+}
+
+function createCanvasHistoryState() {
+	return {
+		canvas_data_url: draw_canvas.toDataURL(),
+		brush_usage: cloneBrushUsage(),
+	};
+}
+
+function normalizeCanvasHistoryState(state) {
+	if (typeof state === "string") {
+		return {
+			canvas_data_url: state,
+			brush_usage: cloneBrushUsage(),
+		};
+	}
+
+	return {
+		canvas_data_url: state.canvas_data_url,
+		brush_usage: cloneBrushUsage(state.brush_usage),
+	};
+}
+
 function saveCanvasState() {
-	const currentCanvasState = draw_canvas.toDataURL();
 	const canvasHistory = draw_canvas_data.history;
-	canvasHistory.push(currentCanvasState);
+	canvasHistory.push(createCanvasHistoryState());
 	if (canvasHistory.length > 50) canvasHistory.shift();
 	draw_canvas_data.redoStack = [];
+}
+
+const canvas_storage_database_name = "pepepaint";
+const canvas_storage_database_version = 1;
+const canvas_storage_store_name = "canvas_saves";
+const canvas_storage_record_id = "latest";
+let canvas_storage_database_promise = null;
+let persistent_canvas_save_requested = false;
+let persistent_canvas_save_task = null;
+let canvas_storage_warning_shown = false;
+let canvas_is_ready = false;
+let number_of_strokes = 0;
+let artwork_started_at = null;
+let pointer_distance_travelled = 0;
+
+function warnCanvasStorage(message, error) {
+	if (canvas_storage_warning_shown) {
+		return;
+	}
+
+	canvas_storage_warning_shown = true;
+	console.warn(message, error);
+}
+
+function openCanvasStorageDatabase() {
+	if (!("indexedDB" in window)) {
+		return Promise.reject(new Error("IndexedDB is not available."));
+	}
+
+	if (!canvas_storage_database_promise) {
+		canvas_storage_database_promise = new Promise((resolve, reject) => {
+			const request = indexedDB.open(canvas_storage_database_name, canvas_storage_database_version);
+
+			request.onupgradeneeded = () => {
+				const database = request.result;
+				if (!database.objectStoreNames.contains(canvas_storage_store_name)) {
+					database.createObjectStore(canvas_storage_store_name, { keyPath: "id" });
+				}
+			};
+
+			request.onsuccess = () => {
+				const database = request.result;
+				database.onversionchange = () => database.close();
+				resolve(database);
+			};
+
+			request.onerror = () => reject(request.error || new Error("Could not open canvas storage."));
+			request.onblocked = () => reject(new Error("Canvas storage upgrade was blocked by another tab."));
+		}).catch((error) => {
+			canvas_storage_database_promise = null;
+			throw error;
+		});
+	}
+
+	return canvas_storage_database_promise;
+}
+
+async function getLatestStoredCanvas() {
+	const database = await openCanvasStorageDatabase();
+
+	return new Promise((resolve, reject) => {
+		const transaction = database.transaction(canvas_storage_store_name, "readonly");
+		const request = transaction.objectStore(canvas_storage_store_name).get(canvas_storage_record_id);
+
+		request.onsuccess = () => resolve(request.result || null);
+		request.onerror = () => reject(request.error || new Error("Could not read the saved canvas."));
+	});
+}
+
+async function putLatestStoredCanvas(blob, saved_traits) {
+	const database = await openCanvasStorageDatabase();
+
+	return new Promise((resolve, reject) => {
+		const transaction = database.transaction(canvas_storage_store_name, "readwrite");
+		transaction.objectStore(canvas_storage_store_name).put({
+			id: canvas_storage_record_id,
+			blob,
+			width: draw_canvas.width,
+			height: draw_canvas.height,
+			number_of_strokes: saved_traits.number_of_strokes,
+			artwork_started_at: saved_traits.artwork_started_at,
+			pointer_distance_travelled: saved_traits.pointer_distance_travelled,
+			brush_usage: cloneBrushUsage(saved_traits.brush_usage),
+			updated_at: Date.now(),
+			schema_version: 1,
+		});
+
+		transaction.oncomplete = () => resolve();
+		transaction.onerror = () => reject(transaction.error || new Error("Could not save the canvas."));
+		transaction.onabort = () => reject(transaction.error || new Error("Canvas storage was aborted."));
+	});
+}
+
+async function deleteLatestStoredCanvas() {
+	const database = await openCanvasStorageDatabase();
+
+	return new Promise((resolve, reject) => {
+		const transaction = database.transaction(canvas_storage_store_name, "readwrite");
+		transaction.objectStore(canvas_storage_store_name).delete(canvas_storage_record_id);
+
+		transaction.oncomplete = () => resolve();
+		transaction.onerror = () => reject(transaction.error || new Error("Could not clear the saved canvas."));
+		transaction.onabort = () => reject(transaction.error || new Error("Clearing canvas storage was aborted."));
+	});
+}
+
+function createCanvasSnapshot() {
+	const snapshot_canvas = document.createElement("canvas");
+	snapshot_canvas.width = draw_canvas.width;
+	snapshot_canvas.height = draw_canvas.height;
+	snapshot_canvas.getContext("2d").drawImage(draw_canvas, 0, 0);
+	return snapshot_canvas;
+}
+
+function canvasToPngBlob(canvas) {
+	return new Promise((resolve, reject) => {
+		canvas.toBlob((blob) => {
+			if (blob) {
+				resolve(blob);
+			} else {
+				reject(new Error("Could not encode the canvas as PNG."));
+			}
+		}, "image/png");
+	});
+}
+
+async function flushPersistentCanvasSaves() {
+	while (persistent_canvas_save_requested) {
+		persistent_canvas_save_requested = false;
+		const snapshot_canvas = createCanvasSnapshot();
+		const snapshot_traits = {
+			number_of_strokes,
+			artwork_started_at,
+			pointer_distance_travelled,
+			brush_usage: cloneBrushUsage(),
+		};
+		const blob = await canvasToPngBlob(snapshot_canvas);
+
+		// A newer action finished while this PNG was being encoded. Skip the
+		// stale write and immediately capture the latest canvas instead.
+		if (persistent_canvas_save_requested) {
+			continue;
+		}
+
+		await putLatestStoredCanvas(blob, snapshot_traits);
+	}
+}
+
+function queuePersistentCanvasSave() {
+	if (!canvas_is_ready) {
+		return persistent_canvas_save_task || Promise.resolve();
+	}
+
+	if (window.pepepaint?.canvas_animation_on) {
+		return persistent_canvas_save_task || Promise.resolve();
+	}
+
+	persistent_canvas_save_requested = true;
+
+	if (!persistent_canvas_save_task) {
+		persistent_canvas_save_task = flushPersistentCanvasSaves()
+			.catch((error) => {
+				warnCanvasStorage("PEPEPAINT could not save the latest canvas locally.", error);
+			})
+			.finally(() => {
+				persistent_canvas_save_task = null;
+				if (persistent_canvas_save_requested) {
+					queuePersistentCanvasSave();
+				}
+			});
+	}
+
+	return persistent_canvas_save_task;
+}
+
+async function waitForPersistentCanvasSaves() {
+	while (persistent_canvas_save_task) {
+		await persistent_canvas_save_task;
+	}
+}
+
+async function drawStoredCanvas(record) {
+	if (!record || record.schema_version !== 1 || !(record.blob instanceof Blob)) {
+		return false;
+	}
+
+	let image_source;
+	let object_url = null;
+
+	if ("createImageBitmap" in window) {
+		image_source = await createImageBitmap(record.blob);
+	} else {
+		object_url = URL.createObjectURL(record.blob);
+		image_source = await new Promise((resolve, reject) => {
+			const image = new Image();
+			image.onload = () => resolve(image);
+			image.onerror = () => {
+				URL.revokeObjectURL(object_url);
+				object_url = null;
+				reject(new Error("Could not decode the saved canvas."));
+			};
+			image.src = object_url;
+		});
+	}
+
+	try {
+		draw_ctx.clearRect(0, 0, draw_canvas.width, draw_canvas.height);
+		draw_ctx.drawImage(image_source, 0, 0, draw_canvas.width, draw_canvas.height);
+		number_of_strokes = Number.isSafeInteger(record.number_of_strokes) && record.number_of_strokes >= 0 ? record.number_of_strokes : 0;
+		artwork_started_at = Number.isFinite(record.artwork_started_at) && record.artwork_started_at >= 0 ? record.artwork_started_at : null;
+		pointer_distance_travelled =
+			Number.isFinite(record.pointer_distance_travelled) && record.pointer_distance_travelled >= 0 ? record.pointer_distance_travelled : 0;
+		restoreBrushUsage(record.brush_usage);
+	} finally {
+		image_source.close?.();
+		if (object_url) {
+			URL.revokeObjectURL(object_url);
+		}
+	}
+
+	return true;
 }
 
 const canvas_blend_radios = document.getElementsByName("canvas_blend_mode");
@@ -2181,25 +2509,30 @@ function setCanvasBlendMode(blendMode) {
 }
 
 function layerUndo() {
+	if (!canvas_is_ready) {
+		return;
+	}
+
 	clearFilters();
 	clearBlendMode(draw_ctx);
 
 	const history = draw_canvas_data.history;
 	if (history.length > 0) {
 		const redoStack = draw_canvas_data.redoStack;
-		const currentCanvasState = draw_canvas.toDataURL();
-		redoStack.push(currentCanvasState);
-		const previousState = history.pop();
+		redoStack.push(createCanvasHistoryState());
+		const previousState = normalizeCanvasHistoryState(history.pop());
 
 		const img = new Image();
 		img.onload = () => {
 			draw_ctx.clearRect(0, 0, window_w, window_h);
 			draw_ctx.imageSmoothingEnabled = true;
 			draw_ctx.drawImage(img, 0, 0, window_w, window_h);
+			restoreBrushUsage(previousState.brush_usage);
 			setFilters();
 			setBlendMode(draw_ctx);
+			queuePersistentCanvasSave();
 		};
-		img.src = previousState;
+		img.src = previousState.canvas_data_url;
 	} else {
 		setFilters();
 		setBlendMode(draw_ctx);
@@ -2207,26 +2540,31 @@ function layerUndo() {
 }
 
 function layerRedo() {
+	if (!canvas_is_ready) {
+		return;
+	}
+
 	clearFilters();
 	clearBlendMode(draw_ctx);
 
 	const redoStack = draw_canvas_data.redoStack;
 	if (redoStack.length > 0) {
 		const history = draw_canvas_data.history;
-		const currentCanvasState = draw_canvas.toDataURL();
-		history.push(currentCanvasState);
+		history.push(createCanvasHistoryState());
 		if (history.length > 50) history.shift();
-		const nextState = redoStack.pop();
+		const nextState = normalizeCanvasHistoryState(redoStack.pop());
 
 		const img = new Image();
 		img.onload = () => {
 			draw_ctx.clearRect(0, 0, window_w, window_h);
 			draw_ctx.imageSmoothingEnabled = true;
 			draw_ctx.drawImage(img, 0, 0, window_w, window_h);
+			restoreBrushUsage(nextState.brush_usage);
 			setFilters();
 			setBlendMode(draw_ctx);
+			queuePersistentCanvasSave();
 		};
-		img.src = nextState;
+		img.src = nextState.canvas_data_url;
 	} else {
 		setFilters();
 		setBlendMode(draw_ctx);
@@ -2549,9 +2887,26 @@ function mouseIsDown() {
 
 // POINTER EVENTS
 let active_pointer_id = null;
+let distance_last_pointer_position = null;
+
+function addPointerDistance(position) {
+	if (!distance_last_pointer_position) {
+		distance_last_pointer_position = { x: position.x, y: position.y };
+		return;
+	}
+
+	pointer_distance_travelled += Math.hypot(
+		position.x - distance_last_pointer_position.x,
+		position.y - distance_last_pointer_position.y,
+	);
+	distance_last_pointer_position = { x: position.x, y: position.y };
+}
 
 preview_canvas.addEventListener("pointerdown", (event) => {
 	// Event listener for pointer down (start drawing on draw_canvas)
+	if (!canvas_is_ready) {
+		return;
+	}
 	if (window.pepepaint.canvas_animation_on) {
 		return;
 	}
@@ -2569,9 +2924,15 @@ preview_canvas.addEventListener("pointerdown", (event) => {
 	active_pointer_id = event.pointerId;
 	preview_canvas.setPointerCapture(event.pointerId);
 	mousePos = getPointerPosition(preview_canvas, event);
+	distance_last_pointer_position = { x: mousePos.x, y: mousePos.y };
 	last_watercolor_deposit = null;
 
 	saveCanvasState();
+	recordCurrentBrushUsage();
+	if (artwork_started_at === null) {
+		artwork_started_at = Date.now();
+	}
+	number_of_strokes += 1;
 
 	// setFilters(); // do this on mouseIsDown for automation
 	setBlendMode(draw_ctx);
@@ -2596,6 +2957,8 @@ preview_canvas.addEventListener("pointerup", (event) => {
 		return;
 	}
 	mousePos = getPointerPosition(preview_canvas, event);
+	addPointerDistance(mousePos);
+	distance_last_pointer_position = null;
 
 	isDrawing = false; // Set drawing mode to false
 	auto_inc_x_running = 0;
@@ -2604,6 +2967,7 @@ preview_canvas.addEventListener("pointerup", (event) => {
 
 	clearFilters();
 	clearBlendMode(draw_ctx);
+	queuePersistentCanvasSave();
 
 	preview_canvas.releasePointerCapture(event.pointerId);
 	active_pointer_id = null;
@@ -2617,11 +2981,19 @@ preview_canvas.addEventListener("pointerout", (event) => {
 	}
 
 	if (stop_drawing_on_mouse_out) {
+		const action_was_active = isDrawing;
+		if (action_was_active && event.pointerId === active_pointer_id) {
+			addPointerDistance(getPointerPosition(preview_canvas, event));
+		}
+		distance_last_pointer_position = null;
 		isDrawing = false;
 		auto_inc_x_running = 0;
 		auto_inc_y_running = 0;
 		last_watercolor_deposit = null;
 		lastPos = null; // Reset last position to avoid drawing a line on re-entry
+		if (action_was_active) {
+			queuePersistentCanvasSave();
+		}
 	}
 	if (is_mouse_pointer) {
 		lastPos = null;
@@ -2635,6 +3007,11 @@ preview_canvas.addEventListener("pointercancel", (event) => {
 	if (event.pointerId !== active_pointer_id) {
 		return;
 	}
+	const action_was_active = isDrawing;
+	if (action_was_active) {
+		addPointerDistance(getPointerPosition(preview_canvas, event));
+	}
+	distance_last_pointer_position = null;
 	preview_ctx.clearRect(0, 0, window_w, window_h);
 	isDrawing = false;
 	auto_inc_x_running = 0;
@@ -2643,6 +3020,9 @@ preview_canvas.addEventListener("pointercancel", (event) => {
 	lastPos = null;
 	preview_canvas.releasePointerCapture(event.pointerId);
 	active_pointer_id = null;
+	if (action_was_active) {
+		queuePersistentCanvasSave();
+	}
 });
 
 preview_canvas.addEventListener("pointermove", (event) => {
@@ -2660,6 +3040,9 @@ preview_canvas.addEventListener("pointermove", (event) => {
 		return;
 	}
 	mousePos = getPointerPosition(preview_canvas, event); // Get pointer coordinates
+	if (isDrawing && event.pointerId === active_pointer_id) {
+		addPointerDistance(mousePos);
+	}
 
 	preview_ctx.clearRect(0, 0, window_w, window_h); // Clear the top canvas before redrawing (avoids smearing of previous drawings)
 
@@ -2709,23 +3092,98 @@ function help() {
 	);
 }
 
-function initCard() {
-	const templateImage = new Image();
-	templateImage.src = "brushes/template02.png";
-	templateImage.onload = () => {
-		draw_ctx.drawImage(templateImage, 0, 0, window_w, window_h);
-	};
+function loadTemplateCardImage() {
+	return new Promise((resolve, reject) => {
+		const templateImage = new Image();
+		templateImage.onload = () => resolve(templateImage);
+		templateImage.onerror = () => reject(new Error("Could not load the default card template."));
+		templateImage.src = "brushes/template02.png";
+	});
 }
 
-initCard();
+async function drawTemplateCard() {
+	const template_image = await loadTemplateCardImage();
+	draw_ctx.drawImage(template_image, 0, 0, window_w, window_h);
+}
+
+async function initCard() {
+	try {
+		try {
+			const stored_canvas = await getLatestStoredCanvas();
+			if (await drawStoredCanvas(stored_canvas)) {
+				return;
+			}
+		} catch (error) {
+			warnCanvasStorage("PEPEPAINT could not restore the latest locally saved canvas.", error);
+		}
+
+		try {
+			await drawTemplateCard();
+		} catch (error) {
+			console.error(error);
+		}
+	} finally {
+		canvas_is_ready = true;
+	}
+}
+
+const canvas_initialization_promise = initCard();
+
+async function resetCanvas() {
+	await canvas_initialization_promise;
+	canvas_is_ready = false;
+	window.stopCanvasAnimations?.();
+	updateAnimatedFilterButtonStates();
+	clearFilters();
+	clearBlendMode(draw_ctx);
+
+	try {
+		const template_image = await loadTemplateCardImage();
+		await waitForPersistentCanvasSaves();
+		persistent_canvas_save_requested = false;
+		await deleteLatestStoredCanvas();
+		number_of_strokes = 0;
+		artwork_started_at = null;
+		pointer_distance_travelled = 0;
+		distance_last_pointer_position = null;
+		restoreBrushUsage(null);
+		latest_submission_traits = null;
+
+		draw_ctx.clearRect(0, 0, draw_canvas.width, draw_canvas.height);
+		preview_ctx.clearRect(0, 0, preview_canvas.width, preview_canvas.height);
+		draw_canvas_data.history = [];
+		draw_canvas_data.redoStack = [];
+		draw_ctx.drawImage(template_image, 0, 0, window_w, window_h);
+		showFeedbackNotification("Canvas reset");
+		return true;
+	} catch (error) {
+		console.error("PEPEPAINT could not reset the canvas.", error);
+		showFeedbackNotification("Canvas reset failed");
+		return false;
+	} finally {
+		canvas_is_ready = true;
+	}
+}
+
+window.resetCanvas = resetCanvas;
 
 window.pepepaint = {
 	canvas_animation_on: false,
+	calculateChaos: (options = {}) => calculateChaos(createFlattenedCanvas(), options),
+	calculateDuration: () => calculateDuration(artwork_started_at),
+	calculatePepeness: (options = {}) => calculatePepeness(createFlattenedCanvas(), options),
 	draw_canvas,
 	draw_ctx,
+	getDistanceTravelled: () => createDistanceTravelledTrait(pointer_distance_travelled, draw_canvas.width, draw_canvas.height),
+	getNumberOfStrokes: () => number_of_strokes,
+	getVariety: () => createVarietyTrait(brush_usage),
+	getLatestSubmissionTraits: () => latest_submission_traits,
 	window_w,
 	window_h,
 	clearFilters,
+	isCanvasReady: () => canvas_is_ready,
+	queuePersistentCanvasSave,
+	resetCanvas,
 	saveCanvasState,
 	setBlendMode: setBrushBlendMode,
 	setBlendEnabled: setBrushBlendEnabled,

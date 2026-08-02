@@ -17,7 +17,8 @@ let edge_pixel_size_amount = 3;
 let pixelate_amount = 4;
 let glitch_pixel_size = 10;
 let glitch_amount = 5;
-let crt_pixel_size_amount = 5;
+let crt_pixel_size_amount = 1;
+let vhs_jitter_amount = 1;
 
 let animation_speed = 10;
 let animated_glitch_on = false;
@@ -110,13 +111,17 @@ Object.defineProperties(window, {
 		get: () => crt_pixel_size_amount,
 		set: (value) => (crt_pixel_size_amount = setFilterNumber(value, crt_pixel_size_amount)),
 	},
+	vhs_jitter_amount: {
+		get: () => vhs_jitter_amount,
+		set: (value) => (vhs_jitter_amount = Math.max(0, setFilterNumber(value, vhs_jitter_amount))),
+	},
 	animation_speed: {
 		get: () => animation_speed,
 		set: (value) => (animation_speed = Math.max(0, setFilterNumber(value, animation_speed))),
 	},
 });
 
-const { draw_canvas, draw_ctx, window_w, window_h, clearFilters, saveCanvasState } = window.pepepaint;
+const { draw_canvas, draw_ctx, window_w, window_h, clearFilters, isCanvasReady, queuePersistentCanvasSave, saveCanvasState } = window.pepepaint;
 
 function blurr() {
 	clearFilters();
@@ -468,7 +473,7 @@ function renderAnimationFrameToCanvas(context, canvas, options = {}) {
 	}
 
 	if (animated_vhs_on) {
-		applyVhsToCanvas(context, canvas, false);
+		applyVhsToCanvas2(context, canvas, false);
 	}
 
 	if (animated_dither_on) {
@@ -512,6 +517,25 @@ function animationTick(timestamp) {
 	animation_frame = requestAnimationFrame(animationTick);
 }
 
+function stopCanvasAnimations() {
+	animated_glitch_on = false;
+	animated_vhs_on = false;
+	animated_dither_on = false;
+	animated_wave_on = false;
+	window.pepepaint.canvas_animation_on = false;
+
+	if (animation_frame !== null) {
+		cancelAnimationFrame(animation_frame);
+		animation_frame = null;
+	}
+
+	if (animation_base_canvas) {
+		draw_ctx.clearRect(0, 0, draw_canvas.width, draw_canvas.height);
+		draw_ctx.drawImage(animation_base_canvas, 0, 0);
+		animation_base_canvas = null;
+	}
+}
+
 function toggleAnimationFilter(filter_name) {
 	const was_active = hasActiveAnimationFilters();
 
@@ -532,14 +556,7 @@ function toggleAnimationFilter(filter_name) {
 	}
 
 	if (!hasActiveAnimationFilters()) {
-		window.pepepaint.canvas_animation_on = false;
-		if (animation_frame !== null) {
-			cancelAnimationFrame(animation_frame);
-			animation_frame = null;
-		}
-		draw_ctx.clearRect(0, 0, draw_canvas.width, draw_canvas.height);
-		draw_ctx.drawImage(animation_base_canvas, 0, 0);
-		animation_base_canvas = null;
+		stopCanvasAnimations();
 		return;
 	}
 
@@ -923,31 +940,60 @@ function applyVhsToCanvas(context, canvas, save_history = true) {
 		saveCanvasState();
 	}
 
-	const width = draw_canvas.width;
-	const height = draw_canvas.height;
-	const imageData = draw_ctx.getImageData(0, 0, width, height);
+	const width = canvas.width;
+	const height = canvas.height;
+	const imageData = context.getImageData(0, 0, width, height);
 	const data = imageData.data;
+	const source_data = new Uint8ClampedArray(data);
+	const chroma_bleed = 4;
+	const frame_phase = Math.random() * Math.PI * 2;
+	const tracking_y = Math.floor(height * (0.68 + Math.random() * 0.24));
+	const tracking_height = Math.max(6, Math.floor(height * 0.045));
+	const head_switch_y = Math.floor(height * 0.965);
 
-	// Create scan lines and distortions
+	// Create scanlines, horizontal timing distortion, and colour bleed.
 	for (let y = 0; y < height; y++) {
-		const lineOffset = Math.sin(y / 20) * 5; // Wavy distortion factor
+		const tracking_distance = Math.abs(y - tracking_y);
+		const in_tracking_band = tracking_distance < tracking_height;
+		const tracking_strength = in_tracking_band ? 1 - tracking_distance / tracking_height : 0;
+		let line_offset = Math.sin(y / 20) * 5;
+
+		// Occasionally throw a complete scanline sideways as the tape loses timing.
+		if (Math.random() < 0.035) {
+			line_offset += (Math.random() - 0.5) * width * 0.08;
+		}
+
+		// Bend a cluster of lines around a moving tracking fault.
+		if (in_tracking_band) {
+			line_offset += Math.sin(y * 0.8 + frame_phase) * tracking_strength * width * 0.055;
+		}
+
+		// Add the larger curved displacement commonly seen along the bottom edge.
+		if (y >= head_switch_y) {
+			const head_switch_progress = (y - head_switch_y) / Math.max(1, height - head_switch_y);
+			line_offset += Math.sin(head_switch_progress * Math.PI) * width * 0.035;
+		}
+
+		line_offset *= vhs_jitter_amount;
+		const scanline_level =
+			y % 4 === 0 ? 0.78
+			: y % 2 === 0 ? 0.9
+			: 1;
 
 		for (let x = 0; x < width; x++) {
 			const index = (y * width + x) * 4;
+			const source_x = Math.max(0, Math.min(width - 1, Math.round(x + line_offset)));
+			const red_x = Math.min(width - 1, source_x + chroma_bleed);
+			const blue_x = Math.max(0, source_x - chroma_bleed);
+			const source_index = (y * width + source_x) * 4;
+			const red_index = (y * width + red_x) * 4;
+			const blue_index = (y * width + blue_x) * 4;
 
-			// Apply scan lines
-			if (y % 2 === 0) {
-				data[index] *= 0.9; // Darken red
-				data[index + 1] *= 0.9; // Darken green
-				data[index + 2] *= 0.9; // Darken blue
-			}
-
-			// Slightly shift color channels for chromatic aberration
-			// if (x + lineOffset > 0 && x + lineOffset < width) {
-			//     const shiftedIndex = (y * width + Math.floor(x + lineOffset)) * 4;
-			//     data[index] = data[shiftedIndex];       // Red channel shift
-			//     data[index + 1] = data[shiftedIndex + 1]; // Green channel shift
-			// }
+			// VHS colour information has a lower horizontal resolution than luminance.
+			// Offset and soften red/blue while green carries the main picture detail.
+			data[index] = (source_data[red_index] * 0.72 + source_data[source_index] * 0.28) * scanline_level;
+			data[index + 1] = source_data[source_index + 1] * scanline_level;
+			data[index + 2] = (source_data[blue_index + 2] * 0.72 + source_data[source_index + 2] * 0.28) * scanline_level;
 
 			// Add noise
 			const noise = (Math.random() - 0.5) * 50; // Random noise
@@ -966,14 +1012,148 @@ function applyVhsToCanvas(context, canvas, save_history = true) {
 	}
 
 	// Apply the modified image data back to the canvas
-	draw_ctx.putImageData(imageData, 0, 0);
+	context.putImageData(imageData, 0, 0);
 
 	// Optional: Draw additional effects like a border or glitch lines
-	drawGlitchLines(draw_ctx, width, height);
+	drawGlitchLines(context, width, height);
+}
+
+function applyVhsToCanvas2(context, canvas, save_history = true) {
+	if (save_history) {
+		saveCanvasState();
+	}
+
+	const width = canvas.width;
+	const height = canvas.height;
+
+	if (width === 0 || height === 0) {
+		return;
+	}
+
+	const source_image = context.getImageData(0, 0, width, height);
+	const source = source_image.data;
+	const output_image = context.createImageData(width, height);
+	const output = output_image.data;
+	const frame_phase = Math.random() * Math.PI * 2;
+	const frame_flicker = 0.96 + Math.random() * 0.07;
+	const tracking_y = Math.floor(height * (0.68 + Math.random() * 0.24));
+	const tracking_height = Math.max(6, Math.floor(height * 0.045));
+	const head_switch_y = Math.floor(height * 0.965);
+	const jitter_amount = vhs_jitter_amount;
+
+	for (let y = 0; y < height; y++) {
+		const tracking_distance = Math.abs(y - tracking_y);
+		const in_tracking_band = tracking_distance < tracking_height;
+		const tracking_strength = in_tracking_band ? 1 - tracking_distance / tracking_height : 0;
+		const row_noise = Math.random();
+		let line_shift = Math.sin(y * 0.032 + frame_phase) * 1.5 + Math.sin(y * 0.009 - frame_phase * 0.7) * 3;
+
+		// Unstable tape timing makes individual scanlines briefly jump sideways.
+		if (row_noise < 0.035) {
+			line_shift += (Math.random() - 0.5) * width * 0.08;
+		}
+
+		if (in_tracking_band) {
+			line_shift += Math.sin(y * 0.8 + frame_phase) * tracking_strength * width * 0.055;
+		}
+
+		// The lower edge of VHS frames often contains a bent "head switching" band.
+		if (y >= head_switch_y) {
+			const head_switch_progress = (y - head_switch_y) / Math.max(1, height - head_switch_y);
+			line_shift += Math.sin(head_switch_progress * Math.PI) * width * 0.035;
+		}
+
+		line_shift *= jitter_amount;
+
+		const vertical_jitter_chance = 0.5 * Math.min(1, jitter_amount);
+		const source_y = Math.max(0, Math.min(height - 1, y + (in_tracking_band && row_noise < vertical_jitter_chance ? 1 : 0)));
+		const shift = Math.round(line_shift);
+		const chroma_offset = 2 + Math.round(tracking_strength * 4);
+		const scanline_level = y % 3 === 0 ? 0.9 : 1;
+		const row_flicker = frame_flicker * (0.985 + Math.random() * 0.03);
+		const is_dropout = Math.random() < 0.018;
+		const dropout_start = is_dropout ? Math.floor(Math.random() * width * 0.72) : -1;
+		const dropout_end = is_dropout ? Math.min(width, dropout_start + width * (0.08 + Math.random() * 0.25)) : -1;
+		const source_row = source_y * width * 4;
+		const destination_row = y * width * 4;
+		let noise_state = (Math.imul(y + 1, 668265263) ^ Math.floor(frame_phase * 100000)) | 0;
+
+		for (let x = 0; x < width; x++) {
+			const destination_index = destination_row + x * 4;
+			let source_x = x + shift;
+			if (source_x < 0) source_x = 0;
+			else if (source_x >= width) source_x = width - 1;
+
+			// Quantizing the colour sample position mimics VHS's low chroma bandwidth.
+			const chroma_x = source_x - (source_x % 4);
+			let red_x = chroma_x + chroma_offset;
+			let blue_x = chroma_x - chroma_offset;
+			if (red_x >= width) red_x = width - 1;
+			if (blue_x < 0) blue_x = 0;
+
+			const base_index = source_row + source_x * 4;
+			const red_index = source_row + red_x * 4;
+			const blue_index = source_row + blue_x * 4;
+
+			// Offset, softened colour samples create the horizontal red/blue bleed.
+			let red = source[red_index] * 0.8 + source[base_index] * 0.2;
+			let green = source[base_index + 1];
+			let blue = source[blue_index + 2] * 0.8 + source[base_index + 2] * 0.2;
+			const luminance = red * 0.299 + green * 0.587 + blue * 0.114;
+			const saturation = 0.82;
+
+			red = luminance + (red - luminance) * saturation;
+			green = luminance + (green - luminance) * saturation;
+			blue = luminance + (blue - luminance) * saturation;
+
+			// A tiny seeded generator creates fine grain without calling Math.random
+			// for every channel of every pixel.
+			noise_state ^= noise_state << 13;
+			noise_state ^= noise_state >>> 17;
+			noise_state ^= noise_state << 5;
+			const grain = ((noise_state >>> 0) / 4294967295 - 0.5) * (32 + tracking_strength * 44);
+			const fuzz_selector = noise_state & 511;
+			const fuzz =
+				fuzz_selector === 0 ? 52
+				: fuzz_selector === 1 ? -36
+				: 0;
+			const level = scanline_level * row_flicker * (1 - tracking_strength * 0.12);
+			const dropout = x >= dropout_start && x < dropout_end ? 28 + grain * 0.35 : 0;
+
+			output[destination_index] = red * level + grain + fuzz + dropout;
+			output[destination_index + 1] = green * level + grain + fuzz + dropout;
+			output[destination_index + 2] = blue * level + grain + fuzz + dropout;
+			output[destination_index + 3] = source[base_index + 3];
+		}
+	}
+
+	context.putImageData(output_image, 0, 0);
+
+	// Thin tracking streaks sit on top of the displaced picture signal.
+	context.save();
+	context.globalCompositeOperation = "source-atop";
+	context.globalAlpha = 0.12 + Math.random() * 0.08;
+	context.fillStyle = "#dce8ff";
+	context.fillRect(0, tracking_y, width, Math.max(1, Math.floor(height * 0.003)));
+	context.globalAlpha = 0.06;
+	for (let y = 1; y < height; y += 3) {
+		context.fillRect(0, y, width, 1);
+	}
+
+	// Short, irregular streaks imitate loose oxide and bursts of tape static.
+	const fuzz_line_count = 3 + Math.floor(Math.random() * 4);
+	for (let i = 0; i < fuzz_line_count; i++) {
+		const fuzz_y = Math.floor(Math.random() * height);
+		const fuzz_x = Math.floor(Math.random() * width * 0.75);
+		const fuzz_width = width * (0.08 + Math.random() * 0.3);
+		context.globalAlpha = 0.05 + Math.random() * 0.1;
+		context.fillRect(fuzz_x, fuzz_y, fuzz_width, Math.random() < 0.8 ? 1 : 2);
+	}
+	context.restore();
 }
 
 function vhs() {
-	applyVhsToCanvas(draw_ctx, draw_canvas, true);
+	applyVhsToCanvas2(draw_ctx, draw_canvas, true);
 }
 
 function animatedVhs() {
@@ -1114,11 +1294,7 @@ function crt2() {
 	draw_ctx.putImageData(imageData, 0, 0);
 }
 
-Object.assign(window, {
-	animatedDither,
-	animatedGlitch,
-	animatedVhs,
-	animatedWave,
+const persistent_filter_actions = {
 	barrel,
 	blurr,
 	crt2,
@@ -1137,4 +1313,24 @@ Object.assign(window, {
 	threshold,
 	vhs,
 	vignette,
+};
+
+for (const [filter_name, filter_action] of Object.entries(persistent_filter_actions)) {
+	persistent_filter_actions[filter_name] = (...args) => {
+		if (!isCanvasReady()) {
+			return;
+		}
+		const result = filter_action(...args);
+		queuePersistentCanvasSave();
+		return result;
+	};
+}
+
+Object.assign(window, {
+	animatedDither: (...args) => isCanvasReady() && animatedDither(...args),
+	animatedGlitch: (...args) => isCanvasReady() && animatedGlitch(...args),
+	animatedVhs: (...args) => isCanvasReady() && animatedVhs(...args),
+	animatedWave: (...args) => isCanvasReady() && animatedWave(...args),
+	stopCanvasAnimations,
+	...persistent_filter_actions,
 });
