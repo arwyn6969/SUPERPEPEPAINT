@@ -42,6 +42,7 @@ jobs:
           rsync -az --delete \
             --include='/index.html' \
             --include='/main.js' \
+            --include='/traits.js' \
             --include='/filters.js' \
             --include='/styles.css' \
             --include='/brushes/***' \
@@ -51,4 +52,6 @@ jobs:
             ./ pepepaint-deploy@87.106.69.245:/var/www/pepepaint/current/
 
       - name: Verify live deployment
-        run: curl --fail --silent --show-error --retry 5 --retry-delay 2 https://pepepaint.journeypaint.fun/ > /dev/null
+        run: |
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 https://pepepaint.journeypaint.fun/ > /dev/null
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 https://pepepaint.journeypaint.fun/traits.js > /dev/null
