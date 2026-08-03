@@ -733,7 +733,9 @@ function createGifBlob(frames, width, height, delayMs) {
 	return new Blob([new Uint8Array(bytes)], { type: "image/gif" });
 }
 
-function createAnimatedCanvasGifBlob() {
+const submission_max_gif_frames = 32;
+
+function createAnimatedCanvasGifBlob({ max_frames = Number.POSITIVE_INFINITY } = {}) {
 	if (!window.pepepaint.canvas_animation_on || typeof window.pepepaint.renderAnimationFrameToCanvas !== "function") {
 		return null;
 	}
@@ -744,7 +746,9 @@ function createAnimatedCanvasGifBlob() {
 	frameCanvas.height = draw_canvas.height;
 	const frames = [];
 	const requested_frame_count = window.pepepaint.getAnimationGifFrameCount?.();
-	const frame_count = Number.isFinite(requested_frame_count) ? Math.max(2, Math.round(requested_frame_count)) : 10;
+	const natural_frame_count = Number.isFinite(requested_frame_count) ? Math.max(2, Math.round(requested_frame_count)) : 10;
+	const normalized_max_frames = Number.isFinite(max_frames) ? Math.max(2, Math.round(max_frames)) : natural_frame_count;
+	const frame_count = Math.min(natural_frame_count, normalized_max_frames);
 
 	for (let i = 0; i < frame_count; i++) {
 		const hasFrame = window.pepepaint.renderAnimationFrameToCanvas(frameCtx, frameCanvas, {
@@ -754,12 +758,14 @@ function createAnimatedCanvasGifBlob() {
 		frames.push(frameCtx.getImageData(0, 0, frameCanvas.width, frameCanvas.height));
 	}
 
-	return createGifBlob(frames, frameCanvas.width, frameCanvas.height, window.animation_speed);
+	const natural_frame_delay = Math.max(20, Number.isFinite(window.animation_speed) ? window.animation_speed : 100);
+	const frame_delay = natural_frame_delay * (natural_frame_count / frame_count);
+	return createGifBlob(frames, frameCanvas.width, frameCanvas.height, frame_delay);
 }
 
 async function createSubmissionArtwork() {
 	if (window.pepepaint.canvas_animation_on) {
-		const gif_blob = createAnimatedCanvasGifBlob();
+		const gif_blob = createAnimatedCanvasGifBlob({ max_frames: submission_max_gif_frames });
 		if (!gif_blob) throw new Error("Could not export the animated artwork as a GIF.");
 		return { blob: gif_blob, filename: "artwork.gif" };
 	}

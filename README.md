@@ -114,7 +114,7 @@ The revert commit triggers a new deployment. If deployment fails, investigate th
 
 ## Submission backend
 
-The frontend sends `multipart/form-data` to `POST /api/submissions`. A submission contains the title, description, editions, Tezos wallet address, selected trait values, and either a PNG or GIF. Animated artwork is submitted as GIF; other artwork is submitted as PNG.
+The frontend sends `multipart/form-data` to `POST /api/submissions`. A submission contains the title, description, editions, Tezos wallet address, selected trait values, and either a PNG or GIF. Animated artwork is submitted as GIF; other artwork is submitted as PNG. Submission GIFs use at most 32 evenly spaced frames, with their delay adjusted to preserve the animation cycle while remaining safely within email attachment limits. Downloaded GIFs retain their full export frame count.
 
 The backend validates the request, saves `artwork.png` or `artwork.gif` alongside `submission.json`, and then sends the artwork and submission details to the configured recipient through Resend. It uses the browser-generated submission UUID and Resend idempotency header to avoid repeat delivery after a retry. Submission never clears the canvas or its IndexedDB save; only the form fields reset after a successful response.
 
