@@ -25,6 +25,27 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Validate frontend JavaScript
+        run: |
+          node --check main.js
+          node --check filters.js
+          node --check traits.js
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Run backend tests
+        working-directory: backend
+        run: npm test
+
       - name: Configure deployment SSH key
         env:
           DEPLOY_KEY: ${{ secrets.PEPEPAINT_DEPLOY_KEY }}
