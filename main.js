@@ -33,7 +33,9 @@ const submission_form = document.getElementById("submission_form");
 const submission_status = document.getElementById("submission_status");
 const submission_close_button = document.getElementById("submission_close_button");
 const submission_cancel_button = document.getElementById("submission_cancel_button");
+const submission_submit_button = document.getElementById("submission_submit_button");
 let latest_submission_traits = null;
+let pending_submission_id = null;
 
 submission_button?.addEventListener("click", () => {
 	if (!submission_dialog.open) {
@@ -52,30 +54,53 @@ new_canvas_button?.addEventListener("click", async () => {
 	button?.addEventListener("click", () => submission_dialog.close());
 });
 
-submission_form?.addEventListener("submit", (event) => {
+submission_form?.addEventListener("input", () => {
+	pending_submission_id = null;
+});
+
+submission_form?.addEventListener("submit", async (event) => {
 	event.preventDefault();
+	if (!submission_form.reportValidity()) return;
+
+	submission_submit_button.disabled = true;
+	if (submission_status) submission_status.textContent = "Status: Preparing submission…";
 
 	try {
 		const submission_canvas = createFlattenedCanvas();
 		const submitted_at = Date.now();
 		latest_submission_traits = {
-			pepeness: calculatePepeness(submission_canvas),
-			chaos: calculateChaos(submission_canvas),
-			number_of_strokes: createNumberOfStrokesTrait(number_of_strokes),
-			variety: createVarietyTrait(brush_usage),
-			duration: calculateDuration(artwork_started_at, submitted_at),
-			distance_travelled: createDistanceTravelledTrait(pointer_distance_travelled, draw_canvas.width, draw_canvas.height),
+			pepeness: calculatePepeness(submission_canvas).value,
+			number_of_strokes: createNumberOfStrokesTrait(number_of_strokes).value,
+			duration: calculateDuration(artwork_started_at, submitted_at).formatted,
+			distance_travelled: createDistanceTravelledTrait(pointer_distance_travelled, draw_canvas.width, draw_canvas.height).value,
+			chaos: calculateChaos(submission_canvas).value,
+			variety: createVarietyTrait(brush_usage).value,
 		};
 
-		console.info("PEPEPAINT submission traits", latest_submission_traits);
-		if (submission_status) {
-			submission_status.textContent = `Status: Traits prepared — PEPENESS ${latest_submission_traits.pepeness.value}% · CHAOS ${latest_submission_traits.chaos.value}% · STROKES ${latest_submission_traits.number_of_strokes.value} · VARIETY ${latest_submission_traits.variety.value} · DURATION ${latest_submission_traits.duration.formatted} · DISTANCE ${latest_submission_traits.distance_travelled.formatted} (backend not connected)`;
+		const artwork = await createSubmissionArtwork();
+		pending_submission_id ||= crypto.randomUUID();
+		const submission_data = new FormData(submission_form);
+		submission_data.set("submission_id", pending_submission_id);
+		submission_data.set("traits", JSON.stringify(latest_submission_traits));
+		submission_data.set("artwork", artwork.blob, artwork.filename);
+
+		if (submission_status) submission_status.textContent = "Status: Sending submission…";
+		const response = await fetch("/api/submissions", { method: "POST", body: submission_data });
+		const result = await response.json().catch(() => ({}));
+		if (!response.ok) {
+			throw new Error(result.error || "The submission could not be delivered.");
 		}
+
+		const submitted_id = pending_submission_id;
+		pending_submission_id = null;
+		submission_form.reset();
+		console.info("PEPEPAINT submission sent", { submission_id: submitted_id, traits: latest_submission_traits });
+		if (submission_status) submission_status.textContent = `Status: Submitted successfully · ${submitted_id}`;
 	} catch (error) {
-		console.error("PEPEPAINT could not calculate submission traits.", error);
-		if (submission_status) {
-			submission_status.textContent = "Status: Could not calculate submission traits";
-		}
+		console.error("PEPEPAINT submission failed.", error);
+		if (submission_status) submission_status.textContent = `Status: ${error.message}`;
+	} finally {
+		submission_submit_button.disabled = false;
 	}
 });
 
@@ -708,16 +733,9 @@ function createGifBlob(frames, width, height, delayMs) {
 	return new Blob([new Uint8Array(bytes)], { type: "image/gif" });
 }
 
-function getGifExportFileName(prefix = "PEPEPAINT") {
-	const now = new Date();
-	const iso_stamp = now.toISOString().replace(/[:.]/g, "-");
-	return `${prefix}_${iso_stamp}.gif`;
-}
-
-function DownloadCanvasAsGif() {
+function createAnimatedCanvasGifBlob() {
 	if (!window.pepepaint.canvas_animation_on || typeof window.pepepaint.renderAnimationFrameToCanvas !== "function") {
-		DownloadCanvasAsPng();
-		return;
+		return null;
 	}
 
 	const frameCanvas = document.createElement("canvas");
@@ -732,14 +750,40 @@ function DownloadCanvasAsGif() {
 		const hasFrame = window.pepepaint.renderAnimationFrameToCanvas(frameCtx, frameCanvas, {
 			animation_progress: i / frame_count,
 		});
-		if (!hasFrame) {
-			DownloadCanvasAsPng();
-			return;
-		}
+		if (!hasFrame) return null;
 		frames.push(frameCtx.getImageData(0, 0, frameCanvas.width, frameCanvas.height));
 	}
 
-	const blob = createGifBlob(frames, frameCanvas.width, frameCanvas.height, window.animation_speed);
+	return createGifBlob(frames, frameCanvas.width, frameCanvas.height, window.animation_speed);
+}
+
+async function createSubmissionArtwork() {
+	if (window.pepepaint.canvas_animation_on) {
+		const gif_blob = createAnimatedCanvasGifBlob();
+		if (!gif_blob) throw new Error("Could not export the animated artwork as a GIF.");
+		return { blob: gif_blob, filename: "artwork.gif" };
+	}
+
+	return { blob: await canvasToPngBlob(createFlattenedCanvas()), filename: "artwork.png" };
+}
+
+function getGifExportFileName(prefix = "PEPEPAINT") {
+	const now = new Date();
+	const iso_stamp = now.toISOString().replace(/[:.]/g, "-");
+	return `${prefix}_${iso_stamp}.gif`;
+}
+
+function DownloadCanvasAsGif() {
+	if (!window.pepepaint.canvas_animation_on || typeof window.pepepaint.renderAnimationFrameToCanvas !== "function") {
+		DownloadCanvasAsPng();
+		return;
+	}
+
+	const blob = createAnimatedCanvasGifBlob();
+	if (!blob) {
+		DownloadCanvasAsPng();
+		return;
+	}
 	downloadBlobAsImage(blob, getGifExportFileName("PEPEPAINT"));
 }
 
@@ -1587,7 +1631,12 @@ document.addEventListener("keyup", (e) => {
 		showFeedbackNotification("All effects off");
 		console.log(`All behaviours turned off`);
 	} else if (e.key === "a") {
+		const brush_name_before_randomise = image_brush_array[Number.parseInt(image_index, 10)];
 		randAll();
+		const brush_name_after_randomise = image_brush_array[Number.parseInt(image_index, 10)];
+		if (isDrawing && active_pointer_id !== null && brush_name_after_randomise !== brush_name_before_randomise) {
+			recordCurrentBrushUsage();
+		}
 	} else if (e.key === "q") {
 		blurr();
 		showFeedbackNotification("Blur");

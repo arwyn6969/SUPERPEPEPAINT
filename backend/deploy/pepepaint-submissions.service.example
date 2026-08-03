@@ -1,0 +1,22 @@
+[Unit]
+Description=PEPEPAINT submission API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pepepaint
+Group=pepepaint
+WorkingDirectory=/var/www/pepepaint/backend
+EnvironmentFile=/etc/pepepaint/submissions.env
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/pepepaint/submissions
+
+[Install]
+WantedBy=multi-user.target

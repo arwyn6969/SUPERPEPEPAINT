@@ -220,6 +220,14 @@ a:active {
 	resize: vertical;
 }
 
+.submission_honeypot {
+	position: absolute;
+	left: -10000px;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+}
+
 .submission_actions {
 	display: flex;
 	flex-flow: row nowrap;
@@ -228,7 +236,7 @@ a:active {
 	user-select: none;
 	width: 400px;
 	position: absolute;
-	top: 314px;
+	top: 390px;
 	left: 0;
 	padding: 0 36px;
 }
@@ -236,7 +244,7 @@ a:active {
 .submission_status {
 	font-size: 1em;
 	position: absolute;
-	top: 360px;
+	top: 435px;
 	left: 0;
 	padding: 0 40px;
 }

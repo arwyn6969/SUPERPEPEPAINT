@@ -116,6 +116,23 @@
 							<span>Editions</span>
 							<input id="submission_editions_input" name="editions" type="number" min="1" max="10000" step="1" value="1" required />
 						</label>
+						<label class="submission_field">
+							<span>Your tz Address</span>
+							<input
+								id="submission_address_input"
+								name="wallet_address"
+								type="text"
+								minlength="36"
+								maxlength="120"
+								autocapitalize="none"
+								autocomplete="off"
+								spellcheck="false"
+								required />
+						</label>
+						<label class="submission_honeypot" aria-hidden="true">
+							<span>Website</span>
+							<input name="website" type="text" tabindex="-1" autocomplete="off" />
+						</label>
 					</div>
 					<div class="submission_actions">
 						<button type="button" class="header_button" id="submission_cancel_button">Cancel</button>

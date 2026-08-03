@@ -1,6 +1,6 @@
 # PEPEPAINT V1
 
-PEPEPAINT is a single-page browser drawing app for creating Pepe-themed artwork. It is built with plain HTML, CSS, and JavaScript and currently has no build step or backend.
+PEPEPAINT is a browser drawing app for creating Pepe-themed artwork. The frontend is plain HTML, CSS, and JavaScript with no build step. A small Node.js service handles artwork submissions.
 
 Live site: <https://pepepaint.journeypaint.fun>
 
@@ -31,8 +31,10 @@ index.html   UI layout and controls
 styles.css  Application styling
 main.js     Drawing logic, brushes, canvas pipeline, and events
 filters.js  Image and canvas filters
+traits.js   Artwork trait calculations
 brushes/    Brush image assets
 fonts/      Custom font assets
+backend/    Submission API, email delivery, archive, and deployment examples
 ```
 
 ## Development workflow
@@ -62,15 +64,18 @@ Every push to `main` triggers the [Deploy PEPEPAINT workflow](.github/workflows/
 
 1. Checks out the committed `main` branch.
 2. Authenticates to the VPS with a dedicated deployment key stored as a GitHub Actions secret.
-3. Synchronises only the production files to `/var/www/pepepaint/current`.
-4. Requests the live URL and fails the workflow if the site is unavailable.
+3. Synchronises the frontend files to `/var/www/pepepaint/current`.
+4. Synchronises the backend runtime files to `/var/www/pepepaint/backend` without touching its environment or archive.
+5. Installs locked production dependencies and restarts `pepepaint-submissions.service` through a narrowly scoped sudo rule.
+6. Verifies the website, `traits.js`, and the public API health endpoint.
 
-The deployed files are:
+The workflow deploys these frontend files:
 
 ```text
 index.html
 main.js
 filters.js
+traits.js
 styles.css
 brushes/
 fonts/
@@ -107,11 +112,55 @@ The revert commit triggers a new deployment. If deployment fails, investigate th
 - If that key is exposed, replace the GitHub secret and remove the corresponding public key from the VPS.
 - Changes to Nginx, DNS, certificates, users, or server permissions are not managed by the deployment workflow and require deliberate server administration.
 
-## Submission form and planned backend
+## Submission backend
 
-The submission interface is present, but form processing is not implemented yet. A future Node.js backend will handle validation and submission storage or delivery.
+The frontend sends `multipart/form-data` to `POST /api/submissions`. A submission contains the title, description, editions, Tezos wallet address, selected trait values, and either a PNG or GIF. Animated artwork is submitted as GIF; other artwork is submitted as PNG.
 
-The backend should remain isolated from JourneyPaint with its own process name, private localhost port, environment file, logs, database role, and Nginx `/api` route. Do not place API keys, credentials, or other secrets in browser-side JavaScript.
+The backend validates the request, saves `artwork.png` or `artwork.gif` alongside `submission.json`, and then sends the artwork and submission details to the configured recipient through Resend. It uses the browser-generated submission UUID and Resend idempotency header to avoid repeat delivery after a retry. Submission never clears the canvas or its IndexedDB save; only the form fields reset after a successful response.
+
+Only these trait values are submitted and archived:
+
+- PEPENESS: `value`
+- Number of strokes: `value`
+- Duration: `formatted`
+- Distance travelled: `value`
+- Chaos: `value`
+- Variety: `value`
+
+### Run the backend locally
+
+Requires Node.js 20.6 or newer.
+
+```sh
+cd backend
+npm ci
+cp .env.example .env
+```
+
+Set `RESEND_API_KEY` and a sender address on a domain verified by Resend, then run:
+
+```sh
+npm start
+```
+
+The service listens on `127.0.0.1:3101` by default and also serves the frontend for local testing. Run backend tests with `npm test`.
+
+### Production setup
+
+Keep the API isolated from JourneyPaint with its own process, private localhost port, environment file, logs, archive directory, and Nginx `/api` route. Do not put the Resend API key or destination email in browser JavaScript.
+
+Example systemd and Nginx configurations are in `backend/deploy/`. The production environment should set:
+
+```text
+PORT=3101
+APP_ENV=production
+RESEND_API_KEY=...
+SUBMISSION_FROM_EMAIL=PEPEPAINT <submissions@pepepaint.journeypaint.fun>
+SUBMISSION_TO_EMAIL=your-private-address@example.com
+SUBMISSION_STORAGE_ROOT=/var/lib/pepepaint/submissions
+```
+
+The workflow deploys the backend runtime and restarts its service, but does not deploy secrets, server configuration, tests, or archived submissions. Do not place the backend archive beneath the public Nginx document root.
 
 ## License and bundled assets
 

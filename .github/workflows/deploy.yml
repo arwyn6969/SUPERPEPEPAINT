@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   deploy:
-    name: Deploy static site
+    name: Deploy application
     runs-on: ubuntu-latest
     environment:
       name: production
@@ -37,7 +37,7 @@ jobs:
             > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
-      - name: Deploy production files
+      - name: Deploy frontend files
         run: |
           rsync -az --delete \
             --include='/index.html' \
@@ -51,7 +51,31 @@ jobs:
             -e 'ssh -i ~/.ssh/pepepaint_deploy -o IdentitiesOnly=yes' \
             ./ pepepaint-deploy@87.106.69.245:/var/www/pepepaint/current/
 
+      - name: Deploy backend files
+        run: |
+          rsync -az --delete \
+            --exclude='/node_modules/***' \
+            --exclude='/.env' \
+            --exclude='/var/***' \
+            --exclude='/test/***' \
+            --exclude='/scripts/***' \
+            --exclude='/deploy/***' \
+            -e 'ssh -i ~/.ssh/pepepaint_deploy -o IdentitiesOnly=yes' \
+            ./backend/ pepepaint-deploy@87.106.69.245:/var/www/pepepaint/backend/
+
+      - name: Install backend dependencies and restart API
+        run: |
+          ssh -i ~/.ssh/pepepaint_deploy -o IdentitiesOnly=yes \
+            pepepaint-deploy@87.106.69.245 '
+              set -eu
+              cd /var/www/pepepaint/backend
+              /usr/bin/npm ci --omit=dev
+              sudo -n /usr/bin/systemctl restart pepepaint-submissions.service
+              sudo -n /usr/bin/systemctl is-active --quiet pepepaint-submissions.service
+            '
+
       - name: Verify live deployment
         run: |
           curl --fail --silent --show-error --retry 5 --retry-delay 2 https://pepepaint.journeypaint.fun/ > /dev/null
           curl --fail --silent --show-error --retry 5 --retry-delay 2 https://pepepaint.journeypaint.fun/traits.js > /dev/null
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 https://pepepaint.journeypaint.fun/api/health > /dev/null
