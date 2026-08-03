@@ -66,6 +66,7 @@ jobs:
             --include='/traits.js' \
             --include='/filters.js' \
             --include='/styles.css' \
+            --include='/favicon/***' \
             --include='/brushes/***' \
             --include='/fonts/***' \
             --exclude='*' \
@@ -98,5 +99,6 @@ jobs:
       - name: Verify live deployment
         run: |
           curl --fail --silent --show-error --retry 5 --retry-delay 2 https://pepepaint.journeypaint.fun/ > /dev/null
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 https://pepepaint.journeypaint.fun/favicon/IMG_2807.JPG > /dev/null
           curl --fail --silent --show-error --retry 5 --retry-delay 2 https://pepepaint.journeypaint.fun/traits.js > /dev/null
           curl --fail --silent --show-error --retry 5 --retry-delay 2 https://pepepaint.journeypaint.fun/api/health > /dev/null
