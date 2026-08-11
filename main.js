@@ -26,6 +26,7 @@ import {
 //      NAV       //
 ////////////////////
 
+const gallery_button = document.getElementById("gallery_button");
 const submission_button = document.getElementById("submission_button");
 const new_canvas_button = document.getElementById("new_canvas_button");
 const submission_dialog = document.getElementById("submission_dialog");
@@ -36,6 +37,11 @@ const submission_cancel_button = document.getElementById("submission_cancel_butt
 const submission_submit_button = document.getElementById("submission_submit_button");
 let latest_submission_traits = null;
 let pending_submission_id = null;
+
+// GALLERY BUTTON
+gallery_button?.addEventListener("click", () => {
+	window.open("https://objkt.com/users/tz1QQkaUxPXKdpkPYe4w999wF9Abggicdad5/created", "_blank", "noopener,noreferrer");
+});
 
 submission_button?.addEventListener("click", () => {
 	if (!submission_dialog.open) {

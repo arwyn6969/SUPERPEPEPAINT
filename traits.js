@@ -1,6 +1,14 @@
-export const PEPE_PALETTE = Object.freeze(["#588B3D", "#A55A35", "#DA291C", "#D99CFF", "#000000", "#FFFFFF", "#0344FF"]);
+export const PEPE_COLOR_LIMITS = Object.freeze({
+	"#588B3D": 0.56,
+	"#A55A35": 0.12,
+	"#D99CFF": 0.04,
+	"#000000": 0.06,
+	"#FFFFFF": 0.06,
+	"#0344FF": 0.16,
+});
+export const PEPE_PALETTE = Object.freeze(Object.keys(PEPE_COLOR_LIMITS));
 
-const PEPENESS_ALGORITHM_VERSION = 1;
+const PEPENESS_ALGORITHM_VERSION = 2;
 const STROKE_COUNT_ALGORITHM_VERSION = 1;
 const DURATION_ALGORITHM_VERSION = 1;
 const DISTANCE_TRAVELLED_ALGORITHM_VERSION = 1;
@@ -26,7 +34,7 @@ function hexToRgb(hex_color) {
 	return [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
 }
 
-function preparePepenessOptions(tolerance, palette) {
+function preparePepenessOptions(tolerance, palette, color_limits) {
 	const numeric_tolerance = Number(tolerance);
 	if (!Number.isFinite(numeric_tolerance) || numeric_tolerance < 0) {
 		throw new RangeError("PEPENESS tolerance must be a non-negative number.");
@@ -36,14 +44,31 @@ function preparePepenessOptions(tolerance, palette) {
 		throw new TypeError("PEPENESS palette must contain at least one hex color.");
 	}
 
+	const palette_entries = palette.map((hex_color) => {
+		const normalized_color = String(hex_color).toUpperCase();
+		const maximum_ratio = Number(color_limits[normalized_color]);
+		if (!Number.isFinite(maximum_ratio) || maximum_ratio < 0 || maximum_ratio > 1) {
+			throw new RangeError(`PEPENESS color limit is invalid for ${hex_color}.`);
+		}
+
+		return {
+			hex_color: normalized_color,
+			rgb: hexToRgb(normalized_color),
+			maximum_ratio,
+		};
+	});
+
 	return {
 		numeric_tolerance,
-		palette_rgb: palette.map(hexToRgb),
+		palette_entries,
 		tolerance_squared: numeric_tolerance * numeric_tolerance,
 	};
 }
 
-export function calculatePepenessFromImageData(image_data, { tolerance = DEFAULT_PEPENESS_TOLERANCE, palette = PEPE_PALETTE } = {}) {
+export function calculatePepenessFromImageData(
+	image_data,
+	{ tolerance = DEFAULT_PEPENESS_TOLERANCE, palette = PEPE_PALETTE, color_limits = PEPE_COLOR_LIMITS } = {},
+) {
 	if (!image_data || !Number.isInteger(image_data.width) || !Number.isInteger(image_data.height) || !ArrayBuffer.isView(image_data.data)) {
 		throw new TypeError("calculatePepenessFromImageData requires ImageData-compatible pixel data.");
 	}
@@ -55,9 +80,9 @@ export function calculatePepenessFromImageData(image_data, { tolerance = DEFAULT
 		throw new RangeError("PEPENESS pixel data does not match its dimensions.");
 	}
 
-	const { numeric_tolerance, palette_rgb, tolerance_squared } = preparePepenessOptions(tolerance, palette);
+	const { numeric_tolerance, palette_entries, tolerance_squared } = preparePepenessOptions(tolerance, palette, color_limits);
 	const pixels = image_data.data;
-	let matched_coverage = 0;
+	const matched_coverage_by_color = new Float64Array(palette_entries.length);
 
 	for (let i = 0; i < pixels.length; i += 4) {
 		const alpha = pixels[i + 3] / 255;
@@ -67,28 +92,57 @@ export function calculatePepenessFromImageData(image_data, { tolerance = DEFAULT
 		const green = pixels[i + 1];
 		const blue = pixels[i + 2];
 
-		for (const [pepe_red, pepe_green, pepe_blue] of palette_rgb) {
+		let closest_palette_index = -1;
+		let closest_distance_squared = Number.POSITIVE_INFINITY;
+
+		for (let palette_index = 0; palette_index < palette_entries.length; palette_index++) {
+			const [pepe_red, pepe_green, pepe_blue] = palette_entries[palette_index].rgb;
 			const red_difference = red - pepe_red;
 			const green_difference = green - pepe_green;
 			const blue_difference = blue - pepe_blue;
 			const distance_squared = red_difference * red_difference + green_difference * green_difference + blue_difference * blue_difference;
 
-			if (distance_squared <= tolerance_squared) {
-				matched_coverage += alpha;
-				break;
+			if (distance_squared <= tolerance_squared && distance_squared < closest_distance_squared) {
+				closest_palette_index = palette_index;
+				closest_distance_squared = distance_squared;
 			}
+		}
+
+		if (closest_palette_index !== -1) {
+			matched_coverage_by_color[closest_palette_index] += alpha;
 		}
 	}
 
-	const percentage = total_pixels === 0 ? 0 : (matched_coverage / total_pixels) * 100;
+	let raw_matched_coverage = 0;
+	let counted_coverage = 0;
+	const colors = {};
+
+	for (let palette_index = 0; palette_index < palette_entries.length; palette_index++) {
+		const { hex_color, maximum_ratio } = palette_entries[palette_index];
+		const raw_coverage = matched_coverage_by_color[palette_index];
+		const maximum_coverage = total_pixels * maximum_ratio;
+		const capped_coverage = Math.min(raw_coverage, maximum_coverage);
+		raw_matched_coverage += raw_coverage;
+		counted_coverage += capped_coverage;
+		colors[hex_color] = {
+			matched_pixels: Math.round(raw_coverage * 1000) / 1000,
+			counted_pixels: Math.round(capped_coverage * 1000) / 1000,
+			maximum_pixels: Math.round(maximum_coverage * 1000) / 1000,
+			maximum_percentage: maximum_ratio * 100,
+		};
+	}
+
+	const percentage = total_pixels === 0 ? 0 : (counted_coverage / total_pixels) * 100;
 
 	return {
 		name: "Croakage (%)",
 		value: Math.round(percentage * 100) / 100,
-		matched_coverage: Math.round(matched_coverage * 1000) / 1000,
+		matched_coverage: Math.round(counted_coverage * 1000) / 1000,
+		raw_matched_coverage: Math.round(raw_matched_coverage * 1000) / 1000,
 		total_pixels,
 		tolerance: numeric_tolerance,
-		palette: [...palette],
+		palette: palette_entries.map(({ hex_color }) => hex_color),
+		colors,
 		algorithm_version: PEPENESS_ALGORITHM_VERSION,
 	};
 }

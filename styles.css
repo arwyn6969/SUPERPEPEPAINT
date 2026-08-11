@@ -108,7 +108,7 @@ body::-webkit-scrollbar {
 
 #header_title {
 	font-family: "unscii8", monospace;
-	font-size: 1.2em;
+	font-size: 1.3em;
 }
 
 .header_item {
@@ -125,7 +125,7 @@ body::-webkit-scrollbar {
 
 .header_button {
 	height: 26px;
-	font-size: 1em;
+	font-size: 0.9em;
 	background-color: #ffffff;
 	border: 4px outset rgb(236, 236, 236);
 	padding: 0 2px;
@@ -328,7 +328,7 @@ a:active {
 	flex-flow: row nowrap;
 	justify-content: center;
 	align-items: center;
-	padding: 0;
+	padding: 0 0 0 12px;
 	user-select: none;
 	width: 400px;
 	position: absolute;
@@ -347,7 +347,7 @@ a:active {
 	user-select: none;
 	width: 400px;
 	position: fixed;
-	top: 356px;
+	top: 366px;
 	left: 0;
 	/* height: 150px; */
 	z-index: 99999999999999;
