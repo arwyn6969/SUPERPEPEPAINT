@@ -30,13 +30,19 @@ body {
 	scrollbar-width: none;
 }
 
+body {
+	position: relative;
+	min-width: 400px;
+	min-height: 560px;
+}
+
 body::-webkit-scrollbar {
 	width: 0;
 	height: 0;
 }
 
 #card {
-	position: fixed;
+	position: absolute;
 	top: 50%;
 	left: 50%;
 	transform: translate(-50%, -50%);
@@ -118,11 +124,11 @@ body::-webkit-scrollbar {
 }
 
 .header_button {
-	height: 28px;
+	height: 26px;
 	font-size: 1em;
 	background-color: #ffffff;
 	border: 4px outset rgb(236, 236, 236);
-	padding: 2px;
+	padding: 0 2px;
 	margin: 2px;
 	cursor: pointer;
 	color: green;
@@ -195,28 +201,63 @@ a:active {
 
 #submission_title {
 	font-family: "unscii8", monospace;
-	font-size: 1.2em;
+	font-size: 1.1em;
 }
 
 .submission_close_button {
 	min-width: 24px;
 }
 
-.submission_field {
+#submission_title_label {
+	position: absolute;
+	top: 74px;
+	left: 0;
+	width: 400px;
 	display: flex;
 	flex-flow: column nowrap;
 	justify-content: center;
 	align-items: center;
-	gap: 2px;
-	padding: 9px;
+}
+
+#submission_description_label {
+	position: absolute;
+	top: 118px;
+	left: 0;
+	width: 400px;
+	display: flex;
+	flex-flow: column nowrap;
+	justify-content: center;
+	align-items: center;
+}
+
+#submission_address_label {
+	position: absolute;
+	top: 216px;
+	left: 0;
+	width: 400px;
+	display: flex;
+	flex-flow: column nowrap;
+	justify-content: center;
+	align-items: center;
+}
+
+#submission_editions_label {
+	position: absolute;
+	top: 264px;
+	left: 0;
+	width: 400px;
+	display: flex;
+	flex-flow: column nowrap;
+	justify-content: center;
+	align-items: center;
 }
 
 .submission_field input,
 .submission_field textarea {
-	width: 100%;
+	width: 310px;
 	background: #ffffff;
 	color: green;
-	padding: 4px;
+	padding: 2px;
 	resize: vertical;
 }
 
@@ -236,7 +277,7 @@ a:active {
 	user-select: none;
 	width: 400px;
 	position: absolute;
-	top: 390px;
+	top: 312px;
 	left: 0;
 	padding: 0 36px;
 }
@@ -244,7 +285,7 @@ a:active {
 .submission_status {
 	font-size: 1em;
 	position: absolute;
-	top: 435px;
+	top: 360px;
 	left: 0;
 	padding: 0 40px;
 }

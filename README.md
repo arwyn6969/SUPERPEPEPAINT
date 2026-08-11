@@ -116,7 +116,7 @@ The revert commit triggers a new deployment. If deployment fails, investigate th
 
 The frontend sends `multipart/form-data` to `POST /api/submissions`. A submission contains the title, description, editions, Tezos wallet address, selected trait values, and either a PNG or GIF. Animated artwork is submitted as GIF; other artwork is submitted as PNG. Submission GIFs use at most 32 evenly spaced frames, with their delay adjusted to preserve the animation cycle while remaining safely within email attachment limits. Downloaded GIFs retain their full export frame count.
 
-The backend validates the request, saves `artwork.png` or `artwork.gif` alongside `submission.json`, and then sends the artwork and submission details to the configured recipient through Resend. It uses the browser-generated submission UUID and Resend idempotency header to avoid repeat delivery after a retry. Submission never clears the canvas or its IndexedDB save; only the form fields reset after a successful response.
+The backend validates the request, saves `artwork.png` or `artwork.gif` alongside `submission.json`, and then sends the artwork and submission details through each configured delivery service. Resend email and a private Telegram channel are supported. It uses the browser-generated submission UUID, archived delivery state, and Resend idempotency header to avoid repeat delivery after a retry. Submission never clears the canvas or its IndexedDB save; only the form fields reset after a successful response.
 
 Only these trait values are submitted and archived:
 
@@ -137,7 +137,7 @@ npm ci
 cp .env.example .env
 ```
 
-Set `RESEND_API_KEY` and a sender address on a domain verified by Resend, then run:
+Set either the Resend variables, the Telegram variables, or both, then run:
 
 ```sh
 npm start
@@ -157,6 +157,8 @@ APP_ENV=production
 RESEND_API_KEY=...
 SUBMISSION_FROM_EMAIL=PEPEPAINT <submissions@pepepaint.journeypaint.fun>
 SUBMISSION_TO_EMAIL=your-private-address@example.com
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_CHAT_ID=-1001234567890
 SUBMISSION_STORAGE_ROOT=/var/lib/pepepaint/submissions
 ```
 

@@ -105,19 +105,15 @@
 						</button>
 					</div>
 					<div>
-						<label class="submission_field">
+						<label class="submission_field" id="submission_title_label">
 							<span>Title</span>
 							<input id="submission_title_input" name="title" type="text" maxlength="120" required />
 						</label>
-						<label class="submission_field">
+						<label class="submission_field" id="submission_description_label">
 							<span>Description</span>
 							<textarea id="submission_description_input" name="description" maxlength="1000" rows="4"></textarea>
 						</label>
-						<label class="submission_field">
-							<span>Editions</span>
-							<input id="submission_editions_input" name="editions" type="number" min="1" max="10000" step="1" value="1" required />
-						</label>
-						<label class="submission_field">
+						<label class="submission_field" id="submission_address_label">
 							<span>Your tz Address</span>
 							<input
 								id="submission_address_input"
@@ -129,6 +125,10 @@
 								autocomplete="off"
 								spellcheck="false"
 								required />
+						</label>
+						<label class="submission_field" id="submission_editions_label">
+							<span>Editions</span>
+							<input id="submission_editions_input" name="editions" type="number" min="1" max="10000" step="1" value="1" required />
 						</label>
 						<label class="submission_honeypot" aria-hidden="true">
 							<span>Website</span>

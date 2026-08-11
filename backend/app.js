@@ -7,8 +7,10 @@ import {
 	SubmissionValidationError,
 	archiveSubmission,
 	createSubmissionEmail,
+	sendWithTelegram,
 	sendWithResend,
 	updateEmailDelivery,
+	updateTelegramDelivery,
 	validateSubmission,
 } from "./submissions.js";
 
@@ -47,11 +49,22 @@ export function createSubmissionApp(options = {}) {
 		api_key: options.api_key ?? process.env.RESEND_API_KEY,
 		from: options.from ?? process.env.SUBMISSION_FROM_EMAIL,
 		to: options.to ?? process.env.SUBMISSION_TO_EMAIL,
+		telegram_bot_token: options.telegram_bot_token ?? process.env.TELEGRAM_BOT_TOKEN,
+		telegram_chat_id: options.telegram_chat_id ?? process.env.TELEGRAM_CHAT_ID,
 		max_file_bytes: positiveInteger(options.max_file_bytes ?? process.env.SUBMISSION_MAX_FILE_BYTES, 25 * 1024 * 1024),
 		rate_window_ms: positiveInteger(options.rate_window_ms ?? process.env.SUBMISSION_RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
 		rate_maximum: positiveInteger(options.rate_maximum ?? process.env.SUBMISSION_RATE_LIMIT_MAX, 5),
 	};
 	const deliver_email = options.deliver_email ?? sendWithResend;
+	const deliver_telegram = options.deliver_telegram ?? sendWithTelegram;
+	const email_values = [configuration.api_key, configuration.from, configuration.to];
+	const telegram_values = [configuration.telegram_bot_token, configuration.telegram_chat_id];
+	const email_requested = Boolean(configuration.api_key);
+	const telegram_requested = telegram_values.some(Boolean);
+	const email_configured = email_requested && email_values.every(Boolean);
+	const telegram_configured = telegram_requested && telegram_values.every(Boolean);
+	const delivery_partially_configured =
+		(email_requested && !email_configured) || (telegram_requested && !telegram_configured);
 	const app = express();
 	app.disable("x-powered-by");
 	app.set("trust proxy", "loopback");
@@ -65,32 +78,59 @@ export function createSubmissionApp(options = {}) {
 	app.get("/api/health", (_request, response) => response.json({ status: "ok" }));
 	app.post("/api/submissions", rate_limit, upload.single("artwork"), async (request, response, next) => {
 		try {
-			if (!configuration.api_key || !configuration.from || !configuration.to) {
-				response.status(503).json({ error: "Submission email is not configured." });
+			if (delivery_partially_configured || (!email_configured && !telegram_configured)) {
+				response.status(503).json({ error: "Submission delivery is not fully configured." });
 				return;
 			}
 
 			const submission = validateSubmission(request.body, request.file);
 			const archived = await archiveSubmission(configuration.storage_root, submission);
-			if (archived.duplicate && archived.record.email_delivery?.status === "sent") {
+			const email_complete = !email_configured || archived.record.email_delivery?.status === "sent";
+			const telegram_complete = !telegram_configured || archived.record.telegram_delivery?.status === "sent";
+			if (archived.duplicate && email_complete && telegram_complete) {
 				response.json({ submission_id: submission.submission_id, status: "submitted" });
 				return;
 			}
 
+			let record = archived.record;
 			const artwork_buffer = archived.duplicate
-				? await readFile(path.join(archived.submission_directory, archived.record.artwork.filename))
+				? await readFile(path.join(archived.submission_directory, record.artwork.filename))
 				: submission.artwork.buffer;
-			const email = createSubmissionEmail(archived.record, artwork_buffer, configuration.from, configuration.to);
-			try {
-				const delivery = await deliver_email({
-					api_key: configuration.api_key,
-					idempotency_key: `pepepaint-${submission.submission_id}`,
-					email,
-				});
-				await updateEmailDelivery(configuration.storage_root, archived.record, "sent", delivery.id);
-			} catch (error) {
-				await updateEmailDelivery(configuration.storage_root, archived.record, "failed", null, error.message);
-				throw error;
+
+			if (email_configured && record.email_delivery?.status !== "sent") {
+				const email = createSubmissionEmail(record, artwork_buffer, configuration.from, configuration.to);
+				try {
+					const delivery = await deliver_email({
+						api_key: configuration.api_key,
+						idempotency_key: `pepepaint-${submission.submission_id}`,
+						email,
+					});
+					record = await updateEmailDelivery(configuration.storage_root, record, "sent", delivery.id);
+				} catch (error) {
+					await updateEmailDelivery(configuration.storage_root, record, "failed", null, error.message);
+					throw error;
+				}
+			}
+
+			if (telegram_configured && record.telegram_delivery?.status !== "sent") {
+				try {
+					const delivery = await deliver_telegram({
+						bot_token: configuration.telegram_bot_token,
+						chat_id: configuration.telegram_chat_id,
+						record,
+						artwork_buffer,
+					});
+					record = await updateTelegramDelivery(
+						configuration.storage_root,
+						record,
+						"sent",
+						delivery.message_id,
+						delivery.method,
+					);
+				} catch (error) {
+					await updateTelegramDelivery(configuration.storage_root, record, "failed", null, null, error.message);
+					throw error;
+				}
 			}
 
 			response.status(201).json({ submission_id: submission.submission_id, status: "submitted" });

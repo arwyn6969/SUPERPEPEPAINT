@@ -8,6 +8,8 @@ const ALLOWED_ARTWORK_TYPES = new Map([
 	["image/png", { extension: "png", signature: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) }],
 	["image/gif", { extension: "gif", signature: Buffer.from("GIF8", "ascii") }],
 ]);
+const TELEGRAM_CAPTION_MAX_LENGTH = 1024;
+const TELEGRAM_PHOTO_MAX_BYTES = 10 * 1024 * 1024;
 
 export class SubmissionValidationError extends Error {
 	constructor(message) {
@@ -135,7 +137,7 @@ export async function archiveSubmission(storage_root, submission) {
 	await writeFile(artwork_path, submission.artwork.buffer, { flag: "wx", mode: 0o600 });
 
 	const record = {
-		schema_version: 1,
+		schema_version: 2,
 		submission_id: submission.submission_id,
 		received_at: new Date().toISOString(),
 		title: submission.title,
@@ -153,6 +155,12 @@ export async function archiveSubmission(storage_root, submission) {
 			message_id: null,
 			updated_at: null,
 		},
+		telegram_delivery: {
+			status: "pending",
+			message_id: null,
+			method: null,
+			updated_at: null,
+		},
 	};
 	await writeJsonAtomic(path.join(submission_directory, "submission.json"), record);
 	return { record, duplicate: false, submission_directory };
@@ -164,6 +172,21 @@ export async function updateEmailDelivery(storage_root, record, status, message_
 		email_delivery: {
 			status,
 			message_id,
+			error: error_message,
+			updated_at: new Date().toISOString(),
+		},
+	};
+	await writeJsonAtomic(path.join(storage_root, record.submission_id, "submission.json"), updated_record);
+	return updated_record;
+}
+
+export async function updateTelegramDelivery(storage_root, record, status, message_id = null, method = null, error_message = null) {
+	const updated_record = {
+		...record,
+		telegram_delivery: {
+			status,
+			message_id,
+			method,
 			error: error_message,
 			updated_at: new Date().toISOString(),
 		},
@@ -232,4 +255,55 @@ export async function sendWithResend({ api_key, idempotency_key, email }) {
 		throw new Error(result.message || `Resend returned HTTP ${response.status}.`);
 	}
 	return result;
+}
+
+function truncateText(value, maximum_length) {
+	if (value.length <= maximum_length) return value;
+	if (maximum_length <= 0) return "";
+	if (maximum_length === 1) return "…";
+	return `${value.slice(0, maximum_length - 1)}…`;
+}
+
+export function createSubmissionTelegramPost(record) {
+	const header = `PEPEPAINT submission\nTitle: ${record.title}\nDescription: `;
+	const suffix = [
+		`Editions: ${record.editions}`,
+		`Wallet address: ${record.wallet_address}`,
+		`PEPENESS: ${record.traits.pepeness}`,
+		`Number of strokes: ${record.traits.number_of_strokes}`,
+		`Duration: ${record.traits.duration}`,
+		`Distance travelled: ${record.traits.distance_travelled}`,
+		`Chaos: ${record.traits.chaos}`,
+		`Variety: ${record.traits.variety}`,
+		`Submission ID: ${record.submission_id}`,
+	].join("\n");
+	const description = record.description || "(none)";
+	const description_length = Math.max(0, TELEGRAM_CAPTION_MAX_LENGTH - header.length - suffix.length - 1);
+	const caption = `${header}${truncateText(description, description_length)}\n${suffix}`;
+
+	if (record.artwork.content_type === "image/gif") {
+		return { method: "sendAnimation", media_field: "animation", caption };
+	}
+	if (record.artwork.size_bytes > TELEGRAM_PHOTO_MAX_BYTES) {
+		return { method: "sendDocument", media_field: "document", caption };
+	}
+	return { method: "sendPhoto", media_field: "photo", caption };
+}
+
+export async function sendWithTelegram({ bot_token, chat_id, record, artwork_buffer, fetch_impl = fetch }) {
+	const post = createSubmissionTelegramPost(record);
+	const form = new FormData();
+	form.set("chat_id", String(chat_id));
+	form.set("caption", post.caption);
+	form.set(post.media_field, new Blob([artwork_buffer], { type: record.artwork.content_type }), record.artwork.filename);
+
+	const response = await fetch_impl(`https://api.telegram.org/bot${bot_token}/${post.method}`, {
+		method: "POST",
+		body: form,
+	});
+	const result = await response.json().catch(() => ({}));
+	if (!response.ok || result.ok !== true || !Number.isSafeInteger(result.result?.message_id)) {
+		throw new Error(result.description || `Telegram returned HTTP ${response.status}.`);
+	}
+	return { message_id: result.result.message_id, method: post.method };
 }

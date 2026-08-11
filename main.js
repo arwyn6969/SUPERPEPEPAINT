@@ -1164,7 +1164,6 @@ let blend_mode = "difference";
 const supported_blend_modes = new Set([
 	"source-atop",
 	"destination-over",
-	"destination-out",
 	"lighter",
 	"copy",
 	"xor",
@@ -1686,7 +1685,7 @@ document.addEventListener("keyup", (e) => {
 		showFeedbackNotification("Glitch");
 		console.log(`glitch applied,
 			glitch_pixel_size: ${window.glitch_pixel_size},
-			canvas_glitch_amount: ${window.canvas_glitch_amount}`);
+			glitch_amount: ${window.glitch_amount}`);
 	} else if (e.key === "p") {
 		pixelate();
 		showFeedbackNotification("Pixelate");
@@ -2022,7 +2021,6 @@ let image_brush_array = [
 	"orbi2",
 	"orbi4",
 	"orbi6",
-	"orbi3",
 	"orbi5",
 	"weds1",
 	"weds2",
@@ -2036,7 +2034,6 @@ let image_brush_array = [
 	"red_down",
 	"heart02",
 	"sun4",
-	"tree4",
 	"ufo4",
 	"cat1",
 	"cat2",
@@ -2046,16 +2043,12 @@ let image_brush_array = [
 	"swoledoge",
 	"firedog",
 	"chad1",
-	"chad2",
-	"chad3",
-	"face1",
 	"face2",
 	"face3",
 	"face4",
 	"fist1",
 	"gondola1",
 	"gondola2",
-	"knuckles2",
 	"knuckles3",
 	"mememan1",
 	"mememan2",
@@ -2063,7 +2056,6 @@ let image_brush_array = [
 	"rarestbook",
 	"sanic1",
 	"sanic2",
-	"sonic3",
 	"sminem1",
 	"spoderman1",
 	"spongebob1",
@@ -2073,7 +2065,6 @@ let image_brush_array = [
 	"doomer",
 	"wojak2",
 	"wojak3",
-	"wojak4",
 	"wojak6",
 	"wojak7",
 	"npc2",
@@ -2950,10 +2941,7 @@ function addPointerDistance(position) {
 		return;
 	}
 
-	pointer_distance_travelled += Math.hypot(
-		position.x - distance_last_pointer_position.x,
-		position.y - distance_last_pointer_position.y,
-	);
+	pointer_distance_travelled += Math.hypot(position.x - distance_last_pointer_position.x, position.y - distance_last_pointer_position.y);
 	distance_last_pointer_position = { x: position.x, y: position.y };
 }
 
@@ -3139,12 +3127,146 @@ preview_canvas.addEventListener("pointermove", (event) => {
 	lastPos = mousePos;
 });
 
+const keyboard_shortcut_help = [
+	{ key: "h", action: "Show or hide the controls", variables: [] },
+	{ key: "s", action: "Save the artwork as PNG or GIF", variables: [] },
+	{ key: "n / m", action: "Decrease / increase brush size", variables: ["brush_size_increment_y", "brush_height"] },
+	{ key: "d / c", action: "Rotate brush left / right", variables: ["manual_inc_rotate", "rotate_angle"] },
+	{ key: "f / v (hold)", action: "Hold the brush on the x / y axis", variables: [] },
+	{ key: "g / b (hold)", action: "Flip the brush horizontally / vertically", variables: [] },
+	{ key: "z / x", action: "Undo / redo", variables: [] },
+	{
+		key: "1",
+		action: "Toggle brush-size automation",
+		variables: [
+			"brush_size_automation_on",
+			"randomise_lock_width_and_height",
+			"randomise_width",
+			"random_walker_width",
+			"randomise_width_range",
+			"randomise_width_speed",
+			"randomise_width_easing",
+			"randomise_height",
+			"random_walker_height",
+			"randomise_height_range",
+			"randomise_height_speed",
+			"randomise_height_easing",
+		],
+	},
+	{ key: "2", action: "Toggle follow-brush direction", variables: ["follow_brush_direction", "smoothing_factor"] },
+	{ key: "3", action: "Toggle rotation", variables: ["rotate_on", "rotate_angle", "rotate_speed", "auto_rotate", "origin_x", "origin_y"] },
+	{
+		key: "4",
+		action: "Toggle mirror",
+		variables: ["mirror_on", "mirror_reflections", "mirror_angle_degrees", "mirror_origin_x", "mirror_origin_y"],
+	},
+	{ key: "5", action: "Toggle snap", variables: ["snap_on", "snap_x", "snap_y"] },
+	{
+		key: "6",
+		action: "Toggle increment / wave movement",
+		variables: [
+			"increment_on",
+			"auto_inc_x_amount",
+			"auto_inc_y_amount",
+			"increment_screen_wrap_on",
+			"wave_on",
+			"x_amp",
+			"x_freq",
+			"x_phase",
+			"y_amp",
+			"y_freq",
+			"y_phase",
+		],
+	},
+	{
+		key: "7",
+		action: "Toggle per-stamp FX",
+		variables: [
+			"fx_on",
+			"hue_rotate_on",
+			"hue_rotate_amount",
+			"auto_hue_rotate_on",
+			"auto_hue_increment_amount",
+			"brightness_on",
+			"brightness_amount",
+			"brightness_auto_increment_on",
+			"brightness_auto_increment_amount",
+			"brightness_ping_pong_on",
+			"saturate_on",
+			"saturate_amount",
+			"saturate_auto_increment_on",
+			"saturate_auto_increment_amount",
+			"saturate_ping_pong_on",
+			"opacity_on",
+			"opacity_amount",
+			"opacity_auto_increment_on",
+			"opacity_auto_increment_amount",
+			"opacity_ping_pong_on",
+			"invert_on",
+			"invert_amount",
+			"invert_auto_increment_on",
+			"invert_auto_increment_amount",
+			"invert_ping_pong_on",
+			"blur_on",
+			"blur_amount",
+			"drop_shadow_on",
+			"drop_shadow_color",
+			"drop_shadow_x_amount",
+			"drop_shadow_y_amount",
+			"drop_shadow_blur_amount",
+		],
+	},
+	{ key: "8", action: "Toggle brush blend mode", variables: ["blend_on", "blend_mode"] },
+	{
+		key: "9",
+		action: "Toggle watercolor",
+		variables: ["watercolor_on", "watercolor_wetness", "watercolor_pigment", "watercolor_granulation", "watercolor_bleed", "watercolor_blendmode"],
+	},
+	{
+		key: "0",
+		action: "Turn all behaviours and effects off",
+		variables: [
+			"brush_size_automation_on",
+			"follow_brush_direction",
+			"rotate_on",
+			"mirror_on",
+			"snap_on",
+			"increment_on",
+			"fx_on",
+			"blend_on",
+			"watercolor_on",
+		],
+	},
+	{ key: "a", action: "Randomize brush and effects", variables: ["brush_size_rand_min", "brush_size_rand_max"] },
+	{ key: "q", action: "Apply canvas blur", variables: ["canvas_blur_amount"] },
+	{ key: "w", action: "Apply canvas invert", variables: ["invert_percentage_amount"] },
+	{ key: "e", action: "Apply threshold", variables: ["threshold_level_amount"] },
+	{ key: "r", action: "Apply dither", variables: ["dither_pixel_size"] },
+	{ key: "t", action: "Apply dilate", variables: [] },
+	{ key: "y", action: "Apply erode", variables: [] },
+	{ key: "u", action: "Apply emboss", variables: ["emboss_pixel_size_amount"] },
+	{ key: "i", action: "Apply edge detection", variables: ["edge_pixel_size_amount"] },
+	{ key: "o", action: "Apply glitch", variables: ["glitch_pixel_size", "glitch_amount"] },
+	{ key: "p", action: "Apply pixelate", variables: ["pixelate_amount"] },
+	{ key: "j", action: "Toggle animated glitch", variables: ["animation_speed", "glitch_pixel_size", "glitch_amount"] },
+	{ key: "k", action: "Toggle animated VHS", variables: ["animation_speed"] },
+	{ key: "l", action: "Toggle animated dither", variables: ["animation_speed", "dither_pixel_size"] },
+	{ key: ";", action: "Toggle animated wave", variables: ["animation_speed", "wave_amplitude", "wave_frequency"] },
+];
+
 function help() {
-	console.log("Welcome to PEPEPAINT");
-	console.log("Controls and Variables:");
-	console.log(
-		"Filters: blur(AMOUNT_IN_PIXELS), invert(PERCENTAGE), sepia(PERCENTAGE), threshold(0-255), solarize(0-255), monochrome(), posterize(LEVELS 2-16), dither(PIXEL_SIZE), dilate(), erode(), emboss(PIXEL_SIZE), edges(PIXEL_SIZE), pixelate(PIXEL_SIZE), glitch(PIXEL_SIZE, AMOUNT), ",
-	);
+	const rows = keyboard_shortcut_help.map(({ key, action, variables }) => ({
+		Key: key,
+		Action: action,
+		"Change in console": variables.length ? variables.map((name) => `${name} = ${JSON.stringify(window[name])}`).join("; ") : "—",
+	}));
+
+	console.log("%cPEPEPAINT keyboard help", "font-weight: bold; font-size: 14px;");
+	console.log("Use lowercase keys without Command/Ctrl/Alt/Shift. Shortcuts pause while typing in form fields.");
+	console.table(rows);
+	console.log("Change any listed setting by assignment, for example: brush_size_increment_y = 10");
+	console.log("Run help() again to see the latest values.");
+	return rows;
 }
 
 function loadTemplateCardImage() {
@@ -3828,3 +3950,4 @@ exposeConsoleSetting("watercolor_blendmode", () => watercolor_blendmode, setWate
 exposeConsoleSetting("blend_mode", () => blend_mode, setBrushBlendMode);
 exposeBooleanSetting("blend_on", () => blend_on, setBrushBlendEnabled);
 window.help = help;
+window.addEventListener("load", help, { once: true });

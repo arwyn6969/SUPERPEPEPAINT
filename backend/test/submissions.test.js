@@ -7,7 +7,10 @@ import {
 	SubmissionValidationError,
 	archiveSubmission,
 	createSubmissionEmail,
+	createSubmissionTelegramPost,
+	sendWithTelegram,
 	updateEmailDelivery,
+	updateTelegramDelivery,
 	validateSubmission,
 } from "../submissions.js";
 
@@ -40,7 +43,8 @@ test("archives a submission with only the selected traits", async () => {
 	const storage_root = await mkdtemp(path.join(os.tmpdir(), "pepepaint-submissions-"));
 	const submission = createSubmission();
 	const archived = await archiveSubmission(storage_root, submission);
-	const delivered = await updateEmailDelivery(storage_root, archived.record, "sent", "email-test-id");
+	const emailed = await updateEmailDelivery(storage_root, archived.record, "sent", "email-test-id");
+	const delivered = await updateTelegramDelivery(storage_root, emailed, "sent", 42, "sendPhoto");
 
 	const record = JSON.parse(await readFile(path.join(storage_root, submission.submission_id, "submission.json"), "utf8"));
 	assert.deepEqual(record.traits, {
@@ -53,6 +57,9 @@ test("archives a submission with only the selected traits", async () => {
 	});
 	assert.equal(record.email_delivery.status, "sent");
 	assert.equal(delivered.email_delivery.message_id, "email-test-id");
+	assert.equal(record.telegram_delivery.status, "sent");
+	assert.equal(delivered.telegram_delivery.message_id, 42);
+	assert.equal(delivered.telegram_delivery.method, "sendPhoto");
 	assert.deepEqual(await readFile(path.join(storage_root, submission.submission_id, "artwork.png")), PNG);
 });
 
@@ -78,6 +85,93 @@ test("builds an email containing the selected values and artwork", () => {
 	assert.match(email.text, /Duration: 00:01:23/);
 	assert.equal(email.attachments[0].filename, "artwork.png");
 	assert.equal(email.attachments[0].content, PNG.toString("base64"));
+});
+
+test("builds a compact Telegram photo post containing the selected values", () => {
+	const submission = createSubmission();
+	const record = {
+		...submission,
+		description: "x".repeat(1000),
+		received_at: new Date().toISOString(),
+		artwork: { filename: "artwork.png", content_type: "image/png", size_bytes: PNG.length },
+	};
+	const post = createSubmissionTelegramPost(record);
+	assert.equal(post.method, "sendPhoto");
+	assert.equal(post.media_field, "photo");
+	assert.ok(post.caption.length <= 1024);
+	assert.match(post.caption, /PEPENESS: 12.5/);
+	assert.match(post.caption, new RegExp(`Submission ID: ${record.submission_id}`));
+	assert.match(post.caption, /…/);
+});
+
+test("selects Telegram animation and document methods for GIFs and large PNGs", () => {
+	const submission = createSubmission();
+	const base_record = {
+		...submission,
+		received_at: new Date().toISOString(),
+		artwork: { filename: "artwork.gif", content_type: "image/gif", size_bytes: GIF.length },
+	};
+	assert.equal(createSubmissionTelegramPost(base_record).method, "sendAnimation");
+	assert.equal(
+		createSubmissionTelegramPost({
+			...base_record,
+			artwork: { filename: "artwork.png", content_type: "image/png", size_bytes: 10 * 1024 * 1024 + 1 },
+		}).method,
+		"sendDocument",
+	);
+});
+
+test("uploads Telegram artwork and returns its message identifier", async () => {
+	const submission = createSubmission();
+	const record = {
+		...submission,
+		received_at: new Date().toISOString(),
+		artwork: { filename: "artwork.png", content_type: "image/png", size_bytes: PNG.length },
+	};
+	let request;
+	const delivery = await sendWithTelegram({
+		bot_token: "test-token",
+		chat_id: "-100123",
+		record,
+		artwork_buffer: PNG,
+		fetch_impl: async (url, options) => {
+			request = { url, options };
+			return {
+				ok: true,
+				status: 200,
+				json: async () => ({ ok: true, result: { message_id: 73 } }),
+			};
+		},
+	});
+
+	assert.equal(request.url, "https://api.telegram.org/bottest-token/sendPhoto");
+	assert.equal(request.options.method, "POST");
+	assert.equal(request.options.body.get("chat_id"), "-100123");
+	assert.equal(request.options.body.get("photo").name, "artwork.png");
+	assert.deepEqual(delivery, { message_id: 73, method: "sendPhoto" });
+});
+
+test("reports Telegram API errors without treating them as delivered", async () => {
+	const submission = createSubmission();
+	const record = {
+		...submission,
+		received_at: new Date().toISOString(),
+		artwork: { filename: "artwork.png", content_type: "image/png", size_bytes: PNG.length },
+	};
+	await assert.rejects(
+		sendWithTelegram({
+			bot_token: "test-token",
+			chat_id: "-100123",
+			record,
+			artwork_buffer: PNG,
+			fetch_impl: async () => ({
+				ok: false,
+				status: 403,
+				json: async () => ({ ok: false, description: "Forbidden: bot cannot send messages" }),
+			}),
+		}),
+		/Forbidden: bot cannot send messages/,
+	);
 });
 
 test("rejects a non-image upload", () => {

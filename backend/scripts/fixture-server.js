@@ -5,6 +5,8 @@ const app = createSubmissionApp({
 	api_key: "test-key",
 	from: "PEPEPAINT <submissions@example.com>",
 	to: "owner@example.com",
+	telegram_bot_token: "",
+	telegram_chat_id: "",
 	rate_maximum: 100,
 	deliver_email: async () => ({ id: "fixture-email-id" }),
 });
