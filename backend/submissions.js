@@ -50,12 +50,13 @@ function parseTraits(value) {
 	}
 
 	return {
-		pepeness: requireNumber(traits.pepeness, "PEPENESS", { max: 100 }),
-		number_of_strokes: requireNumber(traits.number_of_strokes, "Number of strokes", { integer: true }),
+		pepeness: requireNumber(traits.pepeness, "Croakage (%)", { max: 100 }),
+		number_of_strokes: requireNumber(traits.number_of_strokes, "RSi (num)", { integer: true }),
 		duration: requireString(traits.duration, "Duration", { min: 1, max: 40 }),
-		distance_travelled: requireNumber(traits.distance_travelled, "Distance travelled"),
-		chaos: requireNumber(traits.chaos, "Chaos", { max: 100 }),
-		variety: requireNumber(traits.variety, "Variety", { integer: true }),
+		quietus: requireNumber(traits.quietus, "Quietus (%)"),
+		distance_travelled: requireNumber(traits.distance_travelled, "Wanderlust (px)"),
+		chaos: requireNumber(traits.chaos, "Chaos (%)", { max: 100 }),
+		variety: requireNumber(traits.variety, "Brushiness (num)", { integer: true }),
 	};
 }
 
@@ -204,6 +205,10 @@ function escapeHtml(value) {
 		.replaceAll("'", "&#039;");
 }
 
+function formatQuietusPercentage(value) {
+	return value.toFixed(12).replace(/0+$/, "").replace(/\.$/, "");
+}
+
 export function createSubmissionEmail(record, artwork_buffer, from, to) {
 	const description = record.description || "(none)";
 	const rows = [
@@ -213,12 +218,13 @@ export function createSubmissionEmail(record, artwork_buffer, from, to) {
 		["Description", description],
 		["Editions", record.editions],
 		["Wallet address", record.wallet_address],
-		["PEPENESS", record.traits.pepeness],
-		["Number of strokes", record.traits.number_of_strokes],
+		["Croakage (%)", record.traits.pepeness],
+		["RSi (num)", record.traits.number_of_strokes],
 		["Duration", record.traits.duration],
-		["Distance travelled", record.traits.distance_travelled],
-		["Chaos", record.traits.chaos],
-		["Variety", record.traits.variety],
+		["Quietus (%)", formatQuietusPercentage(record.traits.quietus)],
+		["Wanderlust (px)", record.traits.distance_travelled],
+		["Chaos (%)", record.traits.chaos],
+		["Brushiness (num)", record.traits.variety],
 	];
 	const text = rows.map(([label, value]) => `${label}: ${value}`).join("\n");
 	const html_rows = rows
@@ -266,15 +272,16 @@ function truncateText(value, maximum_length) {
 
 export function createSubmissionTelegramPost(record) {
 	const header = `PEPEPAINT submission\nTitle: ${record.title}\nDescription: `;
+	const quietus_percentage = formatQuietusPercentage(record.traits.quietus);
 	const suffix = [
 		`Editions: ${record.editions}`,
 		`Wallet address: ${record.wallet_address}`,
-		`PEPENESS: ${record.traits.pepeness}`,
-		`Number of strokes: ${record.traits.number_of_strokes}`,
-		`Duration: ${record.traits.duration}`,
-		`Distance travelled: ${record.traits.distance_travelled}`,
-		`Chaos: ${record.traits.chaos}`,
-		`Variety: ${record.traits.variety}`,
+		`Croakage (%): ${record.traits.pepeness}`,
+		`RSi (num): ${record.traits.number_of_strokes}`,
+		`Quietus (%): ${quietus_percentage}`,
+		`Wanderlust (px): ${record.traits.distance_travelled}`,
+		`Chaos (%): ${record.traits.chaos}`,
+		`Brushiness (num): ${record.traits.variety}`,
 		`Submission ID: ${record.submission_id}`,
 	].join("\n");
 	const description = record.description || "(none)";

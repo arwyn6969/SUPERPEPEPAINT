@@ -30,6 +30,7 @@ function createSubmission(submission_id = crypto.randomUUID(), artwork = PNG) {
 				pepeness: 12.5,
 				number_of_strokes: 4,
 				duration: "00:01:23",
+				quietus: 0.0000026301,
 				distance_travelled: 456.7,
 				chaos: 45.6,
 				variety: 3,
@@ -51,6 +52,7 @@ test("archives a submission with only the selected traits", async () => {
 		pepeness: 12.5,
 		number_of_strokes: 4,
 		duration: "00:01:23",
+		quietus: 0.0000026301,
 		distance_travelled: 456.7,
 		chaos: 45.6,
 		variety: 3,
@@ -81,8 +83,13 @@ test("builds an email containing the selected values and artwork", () => {
 		artwork: { filename: "artwork.png", content_type: "image/png", size_bytes: PNG.length },
 	};
 	const email = createSubmissionEmail(record, PNG, "submissions@example.com", "owner@example.com");
-	assert.match(email.text, /PEPENESS: 12.5/);
+	assert.match(email.text, /Croakage \(%\): 12.5/);
+	assert.match(email.text, /RSi \(num\): 4/);
 	assert.match(email.text, /Duration: 00:01:23/);
+	assert.match(email.text, /Quietus \(%\): 0\.0000026301/);
+	assert.match(email.text, /Wanderlust \(px\): 456.7/);
+	assert.match(email.text, /Chaos \(%\): 45.6/);
+	assert.match(email.text, /Brushiness \(num\): 3/);
 	assert.equal(email.attachments[0].filename, "artwork.png");
 	assert.equal(email.attachments[0].content, PNG.toString("base64"));
 });
@@ -99,7 +106,12 @@ test("builds a compact Telegram photo post containing the selected values", () =
 	assert.equal(post.method, "sendPhoto");
 	assert.equal(post.media_field, "photo");
 	assert.ok(post.caption.length <= 1024);
-	assert.match(post.caption, /PEPENESS: 12.5/);
+	assert.match(post.caption, /Croakage \(%\): 12.5/);
+	assert.match(post.caption, /RSi \(num\): 4/);
+	assert.match(post.caption, /Quietus \(%\): 0\.0000026301/);
+	assert.match(post.caption, /Wanderlust \(px\): 456.7/);
+	assert.match(post.caption, /Chaos \(%\): 45.6/);
+	assert.match(post.caption, /Brushiness \(num\): 3/);
 	assert.match(post.caption, new RegExp(`Submission ID: ${record.submission_id}`));
 	assert.match(post.caption, /…/);
 });
@@ -187,7 +199,15 @@ test("accepts and archives animated GIF artwork", async () => {
 			description: "",
 			editions: "1",
 			wallet_address: VALID_WALLET,
-			traits: JSON.stringify({ pepeness: 1, number_of_strokes: 2, duration: "00:00:03", distance_travelled: 4, chaos: 5, variety: 1 }),
+			traits: JSON.stringify({
+				pepeness: 1,
+				number_of_strokes: 2,
+				duration: "00:00:03",
+				quietus: 9.5064e-8,
+				distance_travelled: 4,
+				chaos: 5,
+				variety: 1,
+			}),
 		},
 		{ buffer: GIF, mimetype: "image/gif" },
 	);

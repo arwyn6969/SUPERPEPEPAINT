@@ -58,6 +58,31 @@ submission_form?.addEventListener("input", () => {
 	pending_submission_id = null;
 });
 
+function calculateSubmissionTraits(canvas, ended_at = Date.now()) {
+	const duration_trait = calculateDuration(artwork_started_at, ended_at);
+	return {
+		pepeness: calculatePepeness(canvas).value,
+		number_of_strokes: createNumberOfStrokesTrait(number_of_strokes).value,
+		duration: duration_trait.formatted,
+		quietus: duration_trait.quietus,
+		distance_travelled: createDistanceTravelledTrait(pointer_distance_travelled, draw_canvas.width, draw_canvas.height).value,
+		chaos: calculateChaos(canvas).value,
+		variety: createVarietyTrait(brush_usage).value,
+	};
+}
+
+function getPublicTraits() {
+	const values = calculateSubmissionTraits(createFlattenedCanvas());
+	return {
+		"Croakage (%)": values.pepeness,
+		"RSi (num)": values.number_of_strokes,
+		"Quietus (%)": values.quietus,
+		"Wanderlust (px)": values.distance_travelled,
+		"Chaos (%)": values.chaos,
+		"Brushiness (num)": values.variety,
+	};
+}
+
 submission_form?.addEventListener("submit", async (event) => {
 	event.preventDefault();
 	if (!submission_form.reportValidity()) return;
@@ -68,14 +93,7 @@ submission_form?.addEventListener("submit", async (event) => {
 	try {
 		const submission_canvas = createFlattenedCanvas();
 		const submitted_at = Date.now();
-		latest_submission_traits = {
-			pepeness: calculatePepeness(submission_canvas).value,
-			number_of_strokes: createNumberOfStrokesTrait(number_of_strokes).value,
-			duration: calculateDuration(artwork_started_at, submitted_at).formatted,
-			distance_travelled: createDistanceTravelledTrait(pointer_distance_travelled, draw_canvas.width, draw_canvas.height).value,
-			chaos: calculateChaos(submission_canvas).value,
-			variety: createVarietyTrait(brush_usage).value,
-		};
+		latest_submission_traits = calculateSubmissionTraits(submission_canvas, submitted_at);
 
 		const artwork = await createSubmissionArtwork();
 		pending_submission_id ||= crypto.randomUUID();
@@ -3355,6 +3373,7 @@ window.pepepaint = {
 	getNumberOfStrokes: () => number_of_strokes,
 	getVariety: () => createVarietyTrait(brush_usage),
 	getLatestSubmissionTraits: () => latest_submission_traits,
+	traits: getPublicTraits,
 	window_w,
 	window_h,
 	clearFilters,

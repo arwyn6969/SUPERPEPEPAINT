@@ -14,6 +14,7 @@ const CHAOS_LOCAL_UNPREDICTABILITY_WEIGHT = 0.25;
 const CHAOS_EDGE_THRESHOLD = 35;
 const CHAOS_LOCAL_THRESHOLD = 45;
 const CHAOS_TARGET_COLOR_ENTROPY = 6;
+const HUNDRED_YEARS_MS = 100 * 365.25 * 24 * 60 * 60 * 1000;
 
 function hexToRgb(hex_color) {
 	const match = /^#([0-9a-f]{6})$/i.exec(hex_color);
@@ -82,7 +83,7 @@ export function calculatePepenessFromImageData(image_data, { tolerance = DEFAULT
 	const percentage = total_pixels === 0 ? 0 : (matched_coverage / total_pixels) * 100;
 
 	return {
-		name: "PEPENESS",
+		name: "Croakage (%)",
 		value: Math.round(percentage * 100) / 100,
 		matched_coverage: Math.round(matched_coverage * 1000) / 1000,
 		total_pixels,
@@ -111,7 +112,7 @@ export function createNumberOfStrokesTrait(stroke_count) {
 	}
 
 	return {
-		name: "NUMBER OF STROKES",
+		name: "RSi (num)",
 		value: stroke_count,
 		algorithm_version: STROKE_COUNT_ALGORITHM_VERSION,
 	};
@@ -137,12 +138,14 @@ export function calculateDuration(started_at, ended_at = Date.now()) {
 	const has_started = Number.isFinite(started_at) && started_at >= 0;
 	const numeric_started_at = has_started ? Number(started_at) : null;
 	const duration_ms = has_started ? Math.max(0, Math.round(numeric_ended_at - numeric_started_at)) : 0;
+	const quietus_percentage = (duration_ms / HUNDRED_YEARS_MS) * 100;
 
 	return {
-		name: "DURATION",
+		name: "Quietus (%)",
 		value: Math.round((duration_ms / 1000) * 1000) / 1000,
 		unit: "seconds",
 		duration_ms,
+		quietus: Math.round(quietus_percentage * 1e12) / 1e12,
 		formatted: formatDuration(duration_ms),
 		started_at: has_started ? new Date(numeric_started_at).toISOString() : null,
 		ended_at: new Date(numeric_ended_at).toISOString(),
@@ -163,7 +166,7 @@ export function createDistanceTravelledTrait(distance, canvas_width, canvas_heig
 	const rounded_distance = Math.round(distance * 100) / 100;
 
 	return {
-		name: "DISTANCE TRAVELLED",
+		name: "Wanderlust (px)",
 		value: rounded_distance,
 		unit: "canvas_pixels",
 		formatted: `${Math.round(distance).toLocaleString()} px`,
@@ -183,7 +186,7 @@ export function createVarietyTrait(brush_usage) {
 	const normalized_usage = Object.fromEntries(usage_entries);
 
 	return {
-		name: "VARIETY",
+		name: "Brushiness (num)",
 		value: usage_entries.length,
 		unit: "unique_brushes",
 		brushes_used: usage_entries.map(([brush_name]) => brush_name),
@@ -309,7 +312,7 @@ export function calculateChaosFromImageData(image_data) {
 	);
 
 	return {
-		name: "CHAOS",
+		name: "Chaos (%)",
 		value: chaos,
 		unit: "percent",
 		components: {
