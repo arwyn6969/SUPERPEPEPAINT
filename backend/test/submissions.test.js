@@ -88,7 +88,7 @@ test("builds an email containing the selected values and artwork", () => {
 	assert.match(email.text, /Duration: 00:01:23/);
 	assert.match(email.text, /Quietus \(%\): 0\.0000026301/);
 	assert.match(email.text, /Wanderlust \(px\): 456.7/);
-	assert.match(email.text, /Chaos \(%\): 45.6/);
+	assert.match(email.text, /Cows: 45.6/);
 	assert.match(email.text, /Brushiness \(num\): 3/);
 	assert.equal(email.attachments[0].filename, "artwork.png");
 	assert.equal(email.attachments[0].content, PNG.toString("base64"));
@@ -110,7 +110,7 @@ test("builds a compact Telegram photo post containing the selected values", () =
 	assert.match(post.caption, /RSi \(num\): 4/);
 	assert.match(post.caption, /Quietus \(%\): 0\.0000026301/);
 	assert.match(post.caption, /Wanderlust \(px\): 456.7/);
-	assert.match(post.caption, /Chaos \(%\): 45.6/);
+	assert.match(post.caption, /Cows: 45.6/);
 	assert.match(post.caption, /Brushiness \(num\): 3/);
 	assert.match(post.caption, new RegExp(`Submission ID: ${record.submission_id}`));
 	assert.match(post.caption, /…/);

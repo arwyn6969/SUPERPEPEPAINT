@@ -55,7 +55,7 @@ function parseTraits(value) {
 		duration: requireString(traits.duration, "Duration", { min: 1, max: 40 }),
 		quietus: requireNumber(traits.quietus, "Quietus (%)"),
 		distance_travelled: requireNumber(traits.distance_travelled, "Wanderlust (px)"),
-		chaos: requireNumber(traits.chaos, "Chaos (%)", { max: 100 }),
+		chaos: requireNumber(traits.chaos, "Cows", { max: 100 }),
 		variety: requireNumber(traits.variety, "Brushiness (num)", { integer: true }),
 	};
 }
@@ -223,7 +223,7 @@ export function createSubmissionEmail(record, artwork_buffer, from, to) {
 		["Duration", record.traits.duration],
 		["Quietus (%)", formatQuietusPercentage(record.traits.quietus)],
 		["Wanderlust (px)", record.traits.distance_travelled],
-		["Chaos (%)", record.traits.chaos],
+		["Cows", record.traits.chaos],
 		["Brushiness (num)", record.traits.variety],
 	];
 	const text = rows.map(([label, value]) => `${label}: ${value}`).join("\n");
@@ -280,7 +280,7 @@ export function createSubmissionTelegramPost(record) {
 		`RSi (num): ${record.traits.number_of_strokes}`,
 		`Quietus (%): ${quietus_percentage}`,
 		`Wanderlust (px): ${record.traits.distance_travelled}`,
-		`Chaos (%): ${record.traits.chaos}`,
+		`Cows: ${record.traits.chaos}`,
 		`Brushiness (num): ${record.traits.variety}`,
 		`Submission ID: ${record.submission_id}`,
 	].join("\n");

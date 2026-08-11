@@ -366,7 +366,7 @@ export function calculateChaosFromImageData(image_data) {
 	);
 
 	return {
-		name: "Chaos (%)",
+		name: "Cows",
 		value: chaos,
 		unit: "percent",
 		components: {

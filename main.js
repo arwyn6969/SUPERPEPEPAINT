@@ -84,7 +84,7 @@ function getPublicTraits() {
 		"RSi (num)": values.number_of_strokes,
 		"Quietus (%)": values.quietus,
 		"Wanderlust (px)": values.distance_travelled,
-		"Chaos (%)": values.chaos,
+		Cows: values.chaos,
 		"Brushiness (num)": values.variety,
 	};
 }
