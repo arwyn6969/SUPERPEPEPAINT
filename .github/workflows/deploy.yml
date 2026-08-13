@@ -35,8 +35,12 @@ jobs:
       - name: Validate frontend JavaScript
         run: |
           node --check main.js
+          node --check submission-retry.js
           node --check filters.js
           node --check traits.js
+
+      - name: Run frontend tests
+        run: npm test
 
       - name: Install backend dependencies
         working-directory: backend
@@ -63,6 +67,7 @@ jobs:
           rsync -az --delete \
             --include='/index.html' \
             --include='/main.js' \
+            --include='/submission-retry.js' \
             --include='/traits.js' \
             --include='/filters.js' \
             --include='/styles.css' \

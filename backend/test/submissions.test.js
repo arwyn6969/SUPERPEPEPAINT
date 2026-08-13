@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
+	SubmissionConflictError,
 	SubmissionValidationError,
 	SubmissionStorageCapacityError,
 	archiveSubmission,
@@ -11,6 +12,7 @@ import {
 	createSubmissionTelegramPost,
 	enforceSubmissionStoragePolicy,
 	sendWithTelegram,
+	sendWithResend,
 	updateEmailDelivery,
 	updateTelegramDelivery,
 	validateSubmission,
@@ -76,6 +78,25 @@ test("recognizes an already archived submission", async () => {
 	assert.equal(first.duplicate, false);
 	assert.equal(second.duplicate, true);
 	assert.equal(second.record.submission_id, submission.submission_id);
+});
+
+test("rejects the same UUID with different accepted fields or artwork without overwriting the archive", async () => {
+	const storage_root = await mkdtemp(path.join(os.tmpdir(), "pepepaint-submissions-"));
+	const submission = createSubmission();
+	await archiveSubmission(storage_root, submission);
+	const original_record = await readFile(path.join(storage_root, submission.submission_id, "submission.json"), "utf8");
+	const original_artwork = await readFile(path.join(storage_root, submission.submission_id, "artwork.png"));
+
+	await assert.rejects(archiveSubmission(storage_root, { ...submission, title: "Different title" }), SubmissionConflictError);
+	await assert.rejects(
+		archiveSubmission(storage_root, {
+			...submission,
+			artwork: { ...submission.artwork, buffer: Buffer.concat([submission.artwork.buffer, Buffer.from([0])]), size_bytes: submission.artwork.size_bytes + 1 },
+		}),
+		SubmissionConflictError,
+	);
+	assert.equal(await readFile(path.join(storage_root, submission.submission_id, "submission.json"), "utf8"), original_record);
+	assert.deepEqual(await readFile(path.join(storage_root, submission.submission_id, "artwork.png")), original_artwork);
 });
 
 test("builds an email containing the selected values and artwork", () => {
@@ -211,6 +232,38 @@ test("reports Telegram API errors without treating them as delivered", async () 
 			}),
 		}),
 		/Forbidden: bot cannot send messages/,
+	);
+});
+
+test("Telegram exposes a valid retry_after and rejects ok:false on HTTP 200", async () => {
+	const submission = createSubmission();
+	const record = { ...submission, received_at: new Date().toISOString(), artwork: { filename: "artwork.png", content_type: "image/png", size_bytes: PNG.length } };
+	await assert.rejects(
+		sendWithTelegram({
+			bot_token: "test-token",
+			chat_id: "-100123",
+			record,
+			artwork_buffer: PNG,
+			fetch_impl: async () => ({ ok: true, status: 200, json: async () => ({ ok: false, error_code: 429, description: "Too Many Requests", parameters: { retry_after: 7 } }) }),
+		}),
+		(error) => error.status === 429 && error.retry_after_ms === 7_000,
+	);
+});
+
+test("Resend preserves provider code, status, and Retry-After without leaking its request", async () => {
+	await assert.rejects(
+		sendWithResend({
+			api_key: "test-key",
+			idempotency_key: "pepepaint-test",
+			email: { from: "from@example.com", to: ["to@example.com"], subject: "test", text: "test" },
+			fetch_impl: async () => ({
+				ok: false,
+				status: 429,
+				headers: { get: (name) => name === "retry-after" ? "9" : null },
+				json: async () => ({ name: "rate_limit_exceeded", message: "Too many requests" }),
+			}),
+		}),
+		(error) => error.status === 429 && error.provider_code === "rate_limit_exceeded" && error.retry_after_ms === 9_000,
 	);
 });
 

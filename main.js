@@ -6,6 +6,13 @@ import {
 	createRSiTrait,
 	createWanderlustTrait,
 } from "./traits.js";
+import {
+	CANVAS_STORE_NAME,
+	IndexedDbSubmissionStore,
+	SUBMISSION_STATES,
+	SubmissionRetryClient,
+	openPepepaintDatabase,
+} from "./submission-retry.js";
 
 // It's PEPEPAINT v1 first uploaded on 7th Oct 2025
 
@@ -35,8 +42,13 @@ const submission_status = document.getElementById("submission_status");
 const submission_close_button = document.getElementById("submission_close_button");
 const submission_cancel_button = document.getElementById("submission_cancel_button");
 const submission_submit_button = document.getElementById("submission_submit_button");
+const submission_retry_button = document.getElementById("submission_retry_button");
+const submission_dismiss_button = document.getElementById("submission_dismiss_button");
 let latest_submission_traits = null;
-let pending_submission_id = null;
+const submission_retry_client = new SubmissionRetryClient({ store: new IndexedDbSubmissionStore() });
+let current_submission_attempt = null;
+let submission_ui_busy = false;
+let submission_recovery_timer_id = null;
 
 // GALLERY BUTTON
 gallery_button?.addEventListener("click", () => {
@@ -46,6 +58,7 @@ gallery_button?.addEventListener("click", () => {
 submission_button?.addEventListener("click", () => {
 	if (!submission_dialog.open) {
 		submission_dialog.show();
+		void refreshSubmissionRecoveryUi();
 	}
 });
 
@@ -58,10 +71,6 @@ new_canvas_button?.addEventListener("click", async () => {
 
 [submission_close_button, submission_cancel_button].forEach((button) => {
 	button?.addEventListener("click", () => submission_dialog.close());
-});
-
-submission_form?.addEventListener("input", () => {
-	pending_submission_id = null;
 });
 
 function calculateSubmissionTraits(canvas, ended_at = Date.now()) {
@@ -89,52 +98,153 @@ function getPublicTraits() {
 	};
 }
 
+function readSubmissionFormFields() {
+	const values = new FormData(submission_form);
+	return {
+		title: String(values.get("title") || "").trim(),
+		description: String(values.get("description") || "").trim(),
+		editions: String(values.get("editions") || ""),
+		wallet_address: String(values.get("wallet_address") || "").trim(),
+		website: String(values.get("website") || ""),
+	};
+}
+
+function submissionStatusText(record) {
+	if (!record) return "Status: Fill in the form";
+	const suffix = ` · ${record.uuid}`;
+	switch (record.state) {
+		case SUBMISSION_STATES.PREPARING:
+			return `Status: Submission preparation was interrupted; dismiss it to start again${suffix}`;
+		case SUBMISSION_STATES.READY:
+			return `Status: Saved safely on this device and ready to send${suffix}`;
+		case SUBMISSION_STATES.SENDING:
+			return `Status: Sending${suffix}`;
+		case SUBMISSION_STATES.UNCERTAIN:
+			return `Status: Outcome uncertain—safe retry available${suffix}`;
+		case SUBMISSION_STATES.ARCHIVED_QUEUED:
+			return `Status: Safely archived and queued for delivery${suffix}`;
+		case SUBMISSION_STATES.DELIVERED:
+			return `Status: Delivered${suffix}`;
+		case SUBMISSION_STATES.REJECTED:
+			return `Status: Rejected—${record.server_message || record.last_client_error || "correction required"}${suffix}`;
+		default:
+			return `Status: Saved submission${suffix}`;
+	}
+}
+
+function renderSubmissionRecoveryUi(record = current_submission_attempt) {
+	current_submission_attempt = record;
+	if (submission_recovery_timer_id !== null) {
+		clearTimeout(submission_recovery_timer_id);
+		submission_recovery_timer_id = null;
+	}
+	if (record?.state === SUBMISSION_STATES.SENDING && record.send_lease?.expires_at > Date.now()) {
+		submission_recovery_timer_id = setTimeout(() => void refreshSubmissionRecoveryUi(), record.send_lease.expires_at - Date.now() + 50);
+	}
+	const retryable = record && [SUBMISSION_STATES.READY, SUBMISSION_STATES.UNCERTAIN].includes(record.state);
+	const terminal = record && [SUBMISSION_STATES.ARCHIVED_QUEUED, SUBMISSION_STATES.DELIVERED, SUBMISSION_STATES.REJECTED].includes(record.state);
+	if (submission_status) submission_status.textContent = submissionStatusText(record);
+	if (submission_retry_button) {
+		submission_retry_button.hidden = !retryable;
+		submission_retry_button.disabled = submission_ui_busy;
+	}
+	if (submission_dismiss_button) {
+		submission_dismiss_button.hidden = !record;
+		submission_dismiss_button.disabled = submission_ui_busy || record?.state === SUBMISSION_STATES.SENDING;
+		submission_dismiss_button.textContent = terminal ? "Dismiss" : "Abandon";
+	}
+	if (submission_submit_button) submission_submit_button.disabled = submission_ui_busy || Boolean(record);
+}
+
+async function refreshSubmissionRecoveryUi() {
+	try {
+		renderSubmissionRecoveryUi(await submission_retry_client.getCurrent());
+	} catch (error) {
+		console.error("PEPEPAINT could not restore the saved submission.", error);
+		if (submission_status) submission_status.textContent = `Status: Could not access saved submission state—${error.message}`;
+		if (submission_submit_button) submission_submit_button.disabled = true;
+	}
+}
+
+async function sendCurrentSubmission(uuid) {
+	submission_ui_busy = true;
+	try {
+		renderSubmissionRecoveryUi({ ...(await submission_retry_client.store.get(uuid)), state: SUBMISSION_STATES.SENDING });
+		const result = await submission_retry_client.send(uuid);
+		current_submission_attempt = result.record;
+		if (result.accepted) {
+			submission_form.reset();
+			console.info(result.record.state === SUBMISSION_STATES.ARCHIVED_QUEUED ? "PEPEPAINT submission queued" : "PEPEPAINT submission delivered", {
+				submission_id: result.record.uuid,
+				traits: result.record.traits,
+			});
+		}
+		return result;
+	} finally {
+		submission_ui_busy = false;
+		renderSubmissionRecoveryUi(current_submission_attempt);
+	}
+}
+
 submission_form?.addEventListener("submit", async (event) => {
 	event.preventDefault();
-	if (!submission_form.reportValidity()) return;
+	if (!submission_form.reportValidity() || submission_ui_busy) return;
 
-	submission_submit_button.disabled = true;
-	if (submission_status) submission_status.textContent = "Status: Preparing submission…";
+	submission_ui_busy = true;
+	renderSubmissionRecoveryUi(current_submission_attempt);
+	if (submission_status) submission_status.textContent = "Status: Preparing and saving submission…";
 
 	try {
+		if (await submission_retry_client.getCurrent()) throw new Error("Resolve the saved submission before starting another one.");
 		const submission_canvas = createFlattenedCanvas();
-		const submitted_at = Date.now();
-		latest_submission_traits = calculateSubmissionTraits(submission_canvas, submitted_at);
-
+		latest_submission_traits = calculateSubmissionTraits(submission_canvas, Date.now());
+		const preparing = await submission_retry_client.begin(readSubmissionFormFields(), latest_submission_traits);
+		current_submission_attempt = preparing;
+		renderSubmissionRecoveryUi(preparing);
 		const artwork = await createSubmissionArtwork();
-		pending_submission_id ||= crypto.randomUUID();
-		const submission_data = new FormData(submission_form);
-		submission_data.set("submission_id", pending_submission_id);
-		submission_data.set("traits", JSON.stringify(latest_submission_traits));
-		submission_data.set("artwork", artwork.blob, artwork.filename);
-
-		if (submission_status) submission_status.textContent = "Status: Sending submission…";
-		const response = await fetch("/api/submissions", { method: "POST", body: submission_data });
-		const result = await response.json().catch(() => ({}));
-		if (!response.ok) {
-			throw new Error(result.error || "The submission could not be delivered.");
-		}
-
-		const submitted_id = pending_submission_id;
-		pending_submission_id = null;
-		submission_form.reset();
-		const queued = result.status === "queued";
-		console.info(queued ? "PEPEPAINT submission queued" : "PEPEPAINT submission sent", {
-			submission_id: submitted_id,
-			traits: latest_submission_traits,
-		});
-		if (submission_status) {
-			submission_status.textContent = queued
-				? `Status: Safely received and queued for delivery · ${submitted_id}`
-				: `Status: Submitted successfully · ${submitted_id}`;
-		}
+		const ready = await submission_retry_client.makeReady(preparing.uuid, artwork);
+		current_submission_attempt = ready;
+		await sendCurrentSubmission(ready.uuid);
 	} catch (error) {
-		console.error("PEPEPAINT submission failed.", error);
+		console.error("PEPEPAINT submission preparation failed.", error);
+		current_submission_attempt = await submission_retry_client.getCurrent().catch(() => null);
 		if (submission_status) submission_status.textContent = `Status: ${error.message}`;
 	} finally {
-		submission_submit_button.disabled = false;
+		submission_ui_busy = false;
+		renderSubmissionRecoveryUi(current_submission_attempt);
 	}
 });
+
+submission_retry_button?.addEventListener("click", async () => {
+	if (!current_submission_attempt || submission_ui_busy) return;
+	try {
+		await sendCurrentSubmission(current_submission_attempt.uuid);
+	} catch (error) {
+		console.error("PEPEPAINT retry failed.", error);
+		await refreshSubmissionRecoveryUi();
+	}
+});
+
+submission_dismiss_button?.addEventListener("click", async () => {
+	const record = current_submission_attempt;
+	if (!record || submission_ui_busy) return;
+	const uncertain = [SUBMISSION_STATES.SENDING, SUBMISSION_STATES.UNCERTAIN].includes(record.state);
+	const message = uncertain
+		? "Abandon this retry package? The server may already have accepted it, so a new submission could create a duplicate artwork."
+		: record.state === SUBMISSION_STATES.PREPARING || record.state === SUBMISSION_STATES.READY
+			? "Abandon this saved submission and allow a new submission ID to be created?"
+			: "Dismiss this completed submission receipt?";
+	if (!window.confirm(message)) return;
+	try {
+		await submission_retry_client.dismiss(record.uuid);
+		current_submission_attempt = null;
+		renderSubmissionRecoveryUi(null);
+	} catch (error) {
+		if (submission_status) submission_status.textContent = `Status: Could not dismiss saved submission—${error.message}`;
+	}
+});
+
+void refreshSubmissionRecoveryUi();
 
 /////////////////////
 //     HELPERS     //
@@ -2350,9 +2460,7 @@ function saveCanvasState() {
 	draw_canvas_data.redoStack = [];
 }
 
-const canvas_storage_database_name = "pepepaint";
-const canvas_storage_database_version = 1;
-const canvas_storage_store_name = "canvas_saves";
+const canvas_storage_store_name = CANVAS_STORE_NAME;
 const canvas_storage_record_id = "latest";
 let canvas_storage_database_promise = null;
 let persistent_canvas_save_requested = false;
@@ -2373,30 +2481,8 @@ function warnCanvasStorage(message, error) {
 }
 
 function openCanvasStorageDatabase() {
-	if (!("indexedDB" in window)) {
-		return Promise.reject(new Error("IndexedDB is not available."));
-	}
-
 	if (!canvas_storage_database_promise) {
-		canvas_storage_database_promise = new Promise((resolve, reject) => {
-			const request = indexedDB.open(canvas_storage_database_name, canvas_storage_database_version);
-
-			request.onupgradeneeded = () => {
-				const database = request.result;
-				if (!database.objectStoreNames.contains(canvas_storage_store_name)) {
-					database.createObjectStore(canvas_storage_store_name, { keyPath: "id" });
-				}
-			};
-
-			request.onsuccess = () => {
-				const database = request.result;
-				database.onversionchange = () => database.close();
-				resolve(database);
-			};
-
-			request.onerror = () => reject(request.error || new Error("Could not open canvas storage."));
-			request.onblocked = () => reject(new Error("Canvas storage upgrade was blocked by another tab."));
-		}).catch((error) => {
+		canvas_storage_database_promise = openPepepaintDatabase().catch((error) => {
 			canvas_storage_database_promise = null;
 			throw error;
 		});

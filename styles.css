@@ -277,9 +277,10 @@ a:active {
 
 .submission_actions {
 	display: flex;
-	flex-flow: row nowrap;
+	flex-flow: row wrap;
 	justify-content: space-around;
 	align-items: center;
+	gap: 6px;
 	user-select: none;
 	width: 400px;
 	position: absolute;

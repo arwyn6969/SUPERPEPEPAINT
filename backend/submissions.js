@@ -1,7 +1,9 @@
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { inflateSync } from "node:zlib";
 import { createDeliveryRecord, syncDirectory, writeFileSynced, writeJsonAtomic } from "./delivery-outbox.js";
+import { ProviderDeliveryError, parseRetryAfter } from "./provider-delivery.js";
 
 const TEZOS_ADDRESS_PATTERN = /^(?:tz[1-4]|KT1)[1-9A-HJ-NP-Za-km-z]{33}$/;
 const SUBMISSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -39,6 +41,48 @@ export class SubmissionStorageCapacityError extends Error {
 		super(message);
 		this.name = "SubmissionStorageCapacityError";
 	}
+}
+
+export class SubmissionConflictError extends Error {
+	constructor(submission_id) {
+		super("Submission ID payload conflict.");
+		this.name = "SubmissionConflictError";
+		this.submission_id = submission_id;
+	}
+}
+
+export function createSubmissionPayloadFingerprint(submission) {
+	const canonical_fields = JSON.stringify({
+		title: submission.title,
+		description: submission.description,
+		editions: submission.editions,
+		wallet_address: submission.wallet_address,
+		traits: submission.traits,
+		artwork_content_type: submission.artwork.content_type,
+		artwork_size_bytes: submission.artwork.size_bytes,
+	});
+	return createHash("sha256").update(canonical_fields).update("\0").update(submission.artwork.buffer).digest("hex");
+}
+
+async function assertSubmissionMatchesArchived(submission_directory, submission, existing) {
+	const incoming_fingerprint = createSubmissionPayloadFingerprint(submission);
+	let archived_fingerprint = existing.payload_sha256;
+	if (!archived_fingerprint) {
+		const archived_artwork = await readFile(path.join(submission_directory, existing.artwork.filename));
+		archived_fingerprint = createSubmissionPayloadFingerprint({
+			title: existing.title,
+			description: existing.description,
+			editions: existing.editions,
+			wallet_address: existing.wallet_address,
+			traits: existing.traits,
+			artwork: {
+				buffer: archived_artwork,
+				content_type: existing.artwork.content_type,
+				size_bytes: existing.artwork.size_bytes,
+			},
+		});
+	}
+	if (incoming_fingerprint !== archived_fingerprint) throw new SubmissionConflictError(submission.submission_id);
 }
 
 function requireString(value, field_name, { min = 0, max }) {
@@ -567,6 +611,7 @@ export async function archiveSubmission(storage_root, submission, options = {}) 
 	const submission_directory = path.join(storage_root, submission.submission_id);
 	const existing = await readArchivedSubmission(storage_root, submission.submission_id);
 	if (existing) {
+		await assertSubmissionMatchesArchived(submission_directory, submission, existing);
 		return { record: existing, duplicate: true, submission_directory };
 	}
 
@@ -580,8 +625,9 @@ export async function archiveSubmission(storage_root, submission, options = {}) 
 	const artwork_path = path.join(staging_directory, artwork_filename);
 
 	const record = {
-		schema_version: 4,
+		schema_version: 5,
 		submission_id: submission.submission_id,
+		payload_sha256: createSubmissionPayloadFingerprint(submission),
 		received_at: new Date().toISOString(),
 		title: submission.title,
 		description: submission.description,
@@ -610,6 +656,7 @@ export async function archiveSubmission(storage_root, submission, options = {}) 
 			if (!new Set(["EEXIST", "ENOTEMPTY"]).has(error.code)) throw error;
 			const raced_record = await readArchivedSubmission(storage_root, submission.submission_id);
 			if (!raced_record) throw error;
+			await assertSubmissionMatchesArchived(submission_directory, submission, raced_record);
 			await rm(staging_directory, { recursive: true, force: true });
 			return { record: raced_record, duplicate: true, submission_directory };
 		}
@@ -702,21 +749,44 @@ export function createSubmissionEmail(record, artwork_buffer, from, to) {
 }
 
 export async function sendWithResend({ api_key, idempotency_key, email, signal, fetch_impl = fetch }) {
-	const response = await fetch_impl("https://api.resend.com/emails", {
-		method: "POST",
-		signal,
-		headers: {
-			Authorization: `Bearer ${api_key}`,
-			"Content-Type": "application/json",
-			"Idempotency-Key": idempotency_key,
-		},
-		body: JSON.stringify(email),
-	});
-	const result = await response.json().catch(() => ({}));
-	if (!response.ok || typeof result.id !== "string") {
-		const error = new Error(result.message || `Resend returned HTTP ${response.status}.`);
-		error.status = response.status;
+	let response;
+	try {
+		response = await fetch_impl("https://api.resend.com/emails", {
+			method: "POST",
+			signal,
+			headers: {
+				Authorization: `Bearer ${api_key}`,
+				"Content-Type": "application/json",
+				"Idempotency-Key": idempotency_key,
+				"User-Agent": "pepepaint-submissions/1.0",
+			},
+			body: JSON.stringify(email),
+		});
+	} catch (error) {
+		error.request_may_have_reached_provider ??= !new Set(["ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED"]).has(error?.cause?.code ?? error?.code);
 		throw error;
+	}
+	let result;
+	try {
+		result = await response.json();
+	} catch {
+		throw new ProviderDeliveryError("Resend returned an unreadable response", {
+			provider: "resend",
+			status: response.status,
+			kind: "response_parse",
+			response_received: true,
+			request_may_have_reached_provider: true,
+		});
+	}
+	if (!response.ok || typeof result.id !== "string") {
+		throw new ProviderDeliveryError(result.message || `Resend returned HTTP ${response.status}.`, {
+			provider: "resend",
+			status: response.status,
+			provider_code: result.name ?? result.code,
+			retry_after_ms: parseRetryAfter(response.headers?.get?.("retry-after")),
+			response_received: true,
+			request_may_have_reached_provider: true,
+		});
 	}
 	return result;
 }
@@ -763,16 +833,40 @@ export async function sendWithTelegram({ bot_token, chat_id, record, artwork_buf
 	form.set("caption", post.caption);
 	form.set(post.media_field, new Blob([artwork_buffer], { type: record.artwork.content_type }), record.artwork.filename);
 
-	const response = await fetch_impl(`https://api.telegram.org/bot${bot_token}/${post.method}`, {
-		method: "POST",
-		body: form,
-		signal,
-	});
-	const result = await response.json().catch(() => ({}));
-	if (!response.ok || result.ok !== true || !Number.isSafeInteger(result.result?.message_id)) {
-		const error = new Error(result.description || `Telegram returned HTTP ${response.status}.`);
-		error.status = response.status;
+	let response;
+	try {
+		response = await fetch_impl(`https://api.telegram.org/bot${bot_token}/${post.method}`, {
+			method: "POST",
+			body: form,
+			signal,
+		});
+	} catch (error) {
+		error.request_may_have_reached_provider ??= !new Set(["ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED"]).has(error?.cause?.code ?? error?.code);
 		throw error;
+	}
+	let result;
+	try {
+		result = await response.json();
+	} catch {
+		throw new ProviderDeliveryError("Telegram returned an unreadable response", {
+			provider: "telegram",
+			status: response.status,
+			kind: "response_parse",
+			response_received: true,
+			request_may_have_reached_provider: true,
+		});
+	}
+	if (!response.ok || result.ok !== true || !Number.isSafeInteger(result.result?.message_id)) {
+		throw new ProviderDeliveryError(result.description || `Telegram returned HTTP ${response.status}.`, {
+			provider: "telegram",
+			status: Number.isInteger(result.error_code) ? result.error_code : response.status,
+			provider_code: Number.isInteger(result.error_code) ? `telegram_${result.error_code}` : null,
+			retry_after_ms: Number.isFinite(result.parameters?.retry_after) && result.parameters.retry_after >= 0
+				? result.parameters.retry_after * 1000
+				: null,
+			response_received: true,
+			request_may_have_reached_provider: true,
+		});
 	}
 	return { message_id: result.result.message_id, method: post.method };
 }

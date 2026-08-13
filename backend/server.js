@@ -15,10 +15,10 @@ let shutting_down = false;
 async function shutdown() {
 	if (shutting_down) return;
 	shutting_down = true;
-	server.close(async () => {
-		await app.locals.close();
-		process.exit(0);
-	});
+	const closed = new Promise((resolve) => server.close(resolve));
+	await app.locals.close();
+	await closed;
+	process.exit(0);
 }
 
 process.once("SIGTERM", shutdown);

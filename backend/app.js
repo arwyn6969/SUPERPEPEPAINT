@@ -1,8 +1,10 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
 import express from "express";
 import multer from "multer";
 import {
+	SubmissionConflictError,
 	SubmissionValidationError,
 	SubmissionStorageCapacityError,
 	archiveSubmission,
@@ -20,6 +22,7 @@ import {
 	ensureDeliveryRecord,
 	readDeliveryRecord,
 } from "./delivery-outbox.js";
+import { withProviderDeadline } from "./provider-delivery.js";
 
 const backend_directory = path.dirname(fileURLToPath(import.meta.url));
 const project_directory = path.resolve(backend_directory, "..");
@@ -32,6 +35,11 @@ function positiveInteger(value, fallback) {
 function nonNegativeInteger(value, fallback) {
 	const parsed = Number.parseInt(value, 10);
 	return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function boundedInteger(value, fallback, minimum, maximum) {
+	const parsed = Number.parseInt(value, 10);
+	return Number.isSafeInteger(parsed) && parsed >= minimum && parsed <= maximum ? parsed : fallback;
 }
 
 function createRateLimiter({ window_ms, maximum, maximum_clients }) {
@@ -160,15 +168,21 @@ export function createSubmissionApp(options = {}) {
 			5 * 1024 * 1024 * 1024,
 		),
 		storage_retention_days: nonNegativeInteger(options.storage_retention_days ?? process.env.SUBMISSION_STORAGE_RETENTION_DAYS, 0),
-		lease_ms: positiveInteger(options.lease_ms ?? process.env.SUBMISSION_DELIVERY_LEASE_MS, 120_000),
-		delivery_timeout_ms: positiveInteger(options.delivery_timeout_ms ?? process.env.SUBMISSION_DELIVERY_TIMEOUT_MS, 60_000),
-		outbox_interval_ms: nonNegativeInteger(options.outbox_interval_ms ?? process.env.SUBMISSION_OUTBOX_INTERVAL_MS, 30_000),
-		retry_base_delay_ms: positiveInteger(options.retry_base_delay_ms ?? process.env.SUBMISSION_RETRY_BASE_DELAY_MS, 5_000),
-		retry_maximum_delay_ms: positiveInteger(
+		lease_ms: boundedInteger(options.lease_ms ?? process.env.SUBMISSION_DELIVERY_LEASE_MS, 120_000, 5_000, 10 * 60_000),
+		delivery_timeout_ms: boundedInteger(options.delivery_timeout_ms ?? process.env.SUBMISSION_DELIVERY_TIMEOUT_MS, 30_000, 1_000, 120_000),
+		outbox_interval_ms: boundedInteger(options.outbox_interval_ms ?? process.env.SUBMISSION_OUTBOX_INTERVAL_MS, 30_000, 0, 10 * 60_000),
+		retry_base_delay_ms: boundedInteger(options.retry_base_delay_ms ?? process.env.SUBMISSION_RETRY_BASE_DELAY_MS, 5_000, 1_000, 60 * 60_000),
+		retry_maximum_delay_ms: boundedInteger(
 			options.retry_maximum_delay_ms ?? process.env.SUBMISSION_RETRY_MAX_DELAY_MS,
 			15 * 60_000,
+			1_000,
+			24 * 60 * 60_000,
 		),
-		retry_maximum_attempts: positiveInteger(options.retry_maximum_attempts ?? process.env.SUBMISSION_RETRY_MAX_ATTEMPTS, 10),
+		retry_maximum_attempts: boundedInteger(options.retry_maximum_attempts ?? process.env.SUBMISSION_RETRY_MAX_ATTEMPTS, 10, 1, 100),
+		uncertain_delay_ms: boundedInteger(options.uncertain_delay_ms ?? process.env.SUBMISSION_UNCERTAIN_RETRY_DELAY_MS, 5 * 60_000, 1_000, 24 * 60 * 60_000),
+		maximum_uncertain_attempts: boundedInteger(options.maximum_uncertain_attempts ?? process.env.SUBMISSION_UNCERTAIN_MAX_ATTEMPTS, 2, 1, 10),
+		telegram_retry_after_maximum_ms: boundedInteger(options.telegram_retry_after_maximum_ms ?? process.env.TELEGRAM_RETRY_AFTER_MAX_MS, 60 * 60_000, 1_000, 24 * 60 * 60_000),
+		retry_jitter_percent: boundedInteger(options.retry_jitter_percent ?? process.env.SUBMISSION_RETRY_JITTER_PERCENT, 20, 0, 50),
 		outbox_batch_size: positiveInteger(options.outbox_batch_size ?? process.env.SUBMISSION_OUTBOX_BATCH_SIZE, 20),
 		staging_maximum_age_ms: positiveInteger(
 			options.staging_maximum_age_ms ?? process.env.SUBMISSION_STAGING_MAX_AGE_MS,
@@ -186,6 +200,9 @@ export function createSubmissionApp(options = {}) {
 	const delivery_partially_configured =
 		(email_requested && !email_configured) || (telegram_requested && !telegram_configured);
 	const delivery_targets = [email_configured ? "email" : null, telegram_configured ? "telegram" : null].filter(Boolean);
+	const telegram_destination_fingerprint = telegram_configured
+		? createHash("sha256").update(String(configuration.telegram_chat_id)).digest("hex").slice(0, 16)
+		: null;
 	const app = express();
 	app.disable("x-powered-by");
 	app.set("trust proxy", "loopback");
@@ -218,25 +235,32 @@ export function createSubmissionApp(options = {}) {
 		base_delay_ms: configuration.retry_base_delay_ms,
 		maximum_delay_ms: configuration.retry_maximum_delay_ms,
 		maximum_attempts: configuration.retry_maximum_attempts,
+		uncertain_delay_ms: configuration.uncertain_delay_ms,
+		maximum_uncertain_attempts: configuration.maximum_uncertain_attempts,
+		retry_after_maximum_ms: configuration.telegram_retry_after_maximum_ms,
+		jitter_ratio: configuration.retry_jitter_percent / 100,
+		random: options.random,
+		logger: options.logger,
 		batch_size: configuration.outbox_batch_size,
 		clock: options.clock,
-		deliver: async (target_name, { record, artwork_buffer, submission_id }) => {
+		deliver: async (target_name, { record, artwork_buffer, submission_id, signal }) => {
 			if (target_name === "email") {
-				return deliver_email({
+				return withProviderDeadline("resend", (provider_signal) => deliver_email({
 					api_key: configuration.api_key,
 					idempotency_key: `pepepaint-${submission_id}`,
 					email: createSubmissionEmail(record, artwork_buffer, configuration.from, configuration.to),
-					signal: AbortSignal.timeout(configuration.delivery_timeout_ms),
-				});
+					signal: provider_signal,
+				}), { timeout_ms: configuration.delivery_timeout_ms, signal });
 			}
 			if (target_name === "telegram") {
-				return deliver_telegram({
+				const result = await withProviderDeadline("telegram", (provider_signal) => deliver_telegram({
 					bot_token: configuration.telegram_bot_token,
 					chat_id: configuration.telegram_chat_id,
 					record,
 					artwork_buffer,
-					signal: AbortSignal.timeout(configuration.delivery_timeout_ms),
-				});
+					signal: provider_signal,
+				}), { timeout_ms: configuration.delivery_timeout_ms, signal });
+				return { ...result, destination_fingerprint: telegram_destination_fingerprint };
 			}
 			const error = new Error(`Unknown delivery target: ${target_name}`);
 			error.retryable = false;
@@ -282,7 +306,7 @@ export function createSubmissionApp(options = {}) {
 					delivery = await ensureDeliveryRecord(configuration.storage_root, archived.record, delivery_targets);
 				}
 				if (delivery.status !== "delivered" && delivery.status !== "dead_letter") {
-					delivery = await delivery_processor.process(submission.submission_id, { force: true });
+					delivery = await delivery_processor.process(submission.submission_id);
 				}
 				return { archived, delivery };
 			});
@@ -302,6 +326,14 @@ export function createSubmissionApp(options = {}) {
 				});
 				return;
 			}
+			if (result.delivery?.status === "uncertain") {
+				response.status(202).json({
+					submission_id: submission.submission_id,
+					status: "uncertain",
+					message: "Your artwork is safely archived; provider confirmation is pending.",
+				});
+				return;
+			}
 			response.status(202).json({
 				submission_id: submission.submission_id,
 				status: "queued",
@@ -315,7 +347,7 @@ export function createSubmissionApp(options = {}) {
 	});
 
 	if (options.serve_frontend !== false) {
-		for (const filename of ["index.html", "main.js", "traits.js", "filters.js", "styles.css"]) {
+		for (const filename of ["index.html", "main.js", "submission-retry.js", "traits.js", "filters.js", "styles.css"]) {
 			app.get(`/${filename}`, (_request, response) => response.sendFile(path.join(project_directory, filename)));
 		}
 		app.get("/", (_request, response) => response.sendFile(path.join(project_directory, "index.html")));
@@ -324,6 +356,14 @@ export function createSubmissionApp(options = {}) {
 	}
 
 	app.use((error, _request, response, _next) => {
+		if (error instanceof SubmissionConflictError) {
+			response.status(409).json({
+				submission_id: error.submission_id,
+				status: "conflict",
+				error: "This submission ID is already associated with different content.",
+			});
+			return;
+		}
 		if (error instanceof SubmissionValidationError) {
 			response.status(400).json({ error: error.message });
 			return;

@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { createSubmissionApp } from "../app.js";
+import { ProviderDeliveryError } from "../provider-delivery.js";
 import { createPng } from "./fixtures.js";
 
 const PNG = createPng();
@@ -100,6 +101,39 @@ test("archives before delivery and does not redeliver a completed duplicate", as
 	}
 });
 
+test("returns 409 for a same-UUID payload conflict without redelivery", async () => {
+	const storage_root = await mkdtemp(path.join(os.tmpdir(), "pepepaint-app-"));
+	const submission_id = crypto.randomUUID();
+	let delivery_calls = 0;
+	const server = await startApp(
+		configuredOptions(storage_root, {
+			telegram_bot_token: "",
+			telegram_chat_id: "",
+			deliver_email: async () => {
+				delivery_calls += 1;
+				return { id: "one-message" };
+			},
+		}),
+	);
+
+	try {
+		assert.equal((await fetch(`${server.url}/api/submissions`, { method: "POST", body: createSubmissionForm(submission_id) })).status, 201);
+		const conflicting_form = createSubmissionForm(submission_id);
+		conflicting_form.set("title", "Different accepted title");
+		const conflict = await fetch(`${server.url}/api/submissions`, { method: "POST", body: conflicting_form });
+		assert.equal(conflict.status, 409);
+		assert.deepEqual(await conflict.json(), {
+			submission_id,
+			status: "conflict",
+			error: "This submission ID is already associated with different content.",
+		});
+		assert.equal(delivery_calls, 1);
+		assert.equal(JSON.parse(await readFile(path.join(storage_root, submission_id, "submission.json"), "utf8")).title, "Integration test artwork");
+	} finally {
+		await server.close();
+	}
+});
+
 test("serializes two concurrent requests for the same UUID", async () => {
 	const storage_root = await mkdtemp(path.join(os.tmpdir(), "pepepaint-app-"));
 	const submission_id = crypto.randomUUID();
@@ -135,8 +169,12 @@ test("retries only the failed Telegram delivery", async () => {
 	let email_calls = 0;
 	let telegram_calls = 0;
 	const idempotency_keys = [];
+	let now = Date.now() + 10_000;
 	const server = await startApp(
 		configuredOptions(storage_root, {
+			clock: { now: () => now },
+			retry_base_delay_ms: 1_000,
+			retry_jitter_percent: 0,
 			deliver_email: async ({ idempotency_key }) => {
 				email_calls += 1;
 				idempotency_keys.push(idempotency_key);
@@ -166,6 +204,7 @@ test("retries only the failed Telegram delivery", async () => {
 		assert.equal(delivery.targets.email.status, "delivered");
 		assert.equal(delivery.targets.telegram.status, "pending");
 
+		now += 1_000;
 		const retry = await fetch(`${server.url}/api/submissions`, { method: "POST", body: createSubmissionForm(submission_id) });
 		assert.equal(retry.status, 200);
 		assert.equal(email_calls, 1);
@@ -182,8 +221,12 @@ test("reuses the exact Resend idempotency key across retries", async () => {
 	const storage_root = await mkdtemp(path.join(os.tmpdir(), "pepepaint-app-"));
 	const submission_id = crypto.randomUUID();
 	const keys = [];
+	let now = Date.now() + 10_000;
 	const server = await startApp(
 		configuredOptions(storage_root, {
+			clock: { now: () => now },
+			retry_base_delay_ms: 1_000,
+			retry_jitter_percent: 0,
 			telegram_bot_token: "",
 			telegram_chat_id: "",
 			deliver_email: async ({ idempotency_key }) => {
@@ -197,6 +240,7 @@ test("reuses the exact Resend idempotency key across retries", async () => {
 	try {
 		const first = await fetch(`${server.url}/api/submissions`, { method: "POST", body: createSubmissionForm(submission_id) });
 		assert.equal(first.status, 202);
+		now += 1_000;
 		const retry = await fetch(`${server.url}/api/submissions`, { method: "POST", body: createSubmissionForm(submission_id) });
 		assert.equal(retry.status, 200);
 		assert.deepEqual(keys, [`pepepaint-${submission_id}`, `pepepaint-${submission_id}`]);
@@ -231,6 +275,32 @@ test("supports Telegram-only delivery when Resend has no API key", async () => {
 		assert.equal(response.status, 201);
 		assert.equal(email_calls, 0);
 		assert.equal(telegram_calls, 1);
+	} finally {
+		await server.close();
+	}
+});
+
+test("an archived provider timeout reports uncertain and a browser retry preserves its schedule and key", async () => {
+	const storage_root = await mkdtemp(path.join(os.tmpdir(), "pepepaint-app-"));
+	const submission_id = crypto.randomUUID();
+	const keys = [];
+	const server = await startApp(configuredOptions(storage_root, {
+		telegram_bot_token: "",
+		telegram_chat_id: "",
+		uncertain_delay_ms: 60_000,
+		deliver_email: async ({ idempotency_key }) => {
+			keys.push(idempotency_key);
+			throw new ProviderDeliveryError("Provider deadline exceeded", { provider: "resend", kind: "timeout", request_may_have_reached_provider: true });
+		},
+	}));
+	try {
+		const first = await fetch(`${server.url}/api/submissions`, { method: "POST", body: createSubmissionForm(submission_id) });
+		assert.equal(first.status, 202);
+		assert.equal((await first.json()).status, "uncertain");
+		const retry = await fetch(`${server.url}/api/submissions`, { method: "POST", body: createSubmissionForm(submission_id) });
+		assert.equal(retry.status, 202);
+		assert.equal((await retry.json()).status, "uncertain");
+		assert.deepEqual(keys, [`pepepaint-${submission_id}`]);
 	} finally {
 		await server.close();
 	}

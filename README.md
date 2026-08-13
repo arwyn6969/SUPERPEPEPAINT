@@ -52,7 +52,7 @@ git commit -m "Describe the change"
 git push
 ```
 
-There are currently no automated tests. Manually verify brush previews, drawing behaviour, keyboard controls, filters, undo/redo, and image export in a browser.
+Run `npm test` at the repository root for submission-retry client tests. Manually verify brush previews, drawing behaviour, keyboard controls, filters, undo/redo, and image export in a browser.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for more detail and [AGENTS.md](AGENTS.md) for project-specific coding guidance.
 
@@ -74,6 +74,7 @@ The workflow deploys these frontend files:
 ```text
 index.html
 main.js
+submission-retry.js
 filters.js
 traits.js
 styles.css
@@ -116,12 +117,30 @@ The revert commit triggers a new deployment. If deployment fails, investigate th
 
 The frontend sends `multipart/form-data` to `POST /api/submissions`. A submission contains the title, description, editions, Tezos wallet address, selected trait values, and either a PNG or GIF. Animated artwork is submitted as GIF; other artwork is submitted as PNG. Submission GIFs use at most 32 evenly spaced frames, with their delay adjusted to preserve the animation cycle while remaining safely within email attachment limits. Downloaded GIFs retain their full export frame count.
 
+Before artwork encoding begins, the browser persists a UUID and `preparing`
+record in the `submission_attempts` IndexedDB store. Before the first request,
+it adds the exact encoded artwork Blob, its SHA-256 digest, normalized form
+fields, accepted traits, filename/type/size, timestamps, and attempt metadata,
+then moves the record to `ready`. Requests move through `sending` and then to
+`uncertain`, `archived_queued`, `delivered`, or `rejected`. Reloading a
+`sending` record after its send lease expires makes it `uncertain` (`draft` is
+represented by no submission record); retries
+always reconstruct the multipart body from the frozen record and reuse its
+UUID. There is no automatic retry loop. A user must explicitly dismiss a
+terminal record or abandon a pending record before a new UUID can be created.
+Abandoning an uncertain record warns that the server may already have accepted
+it. Web Locks and an expiring IndexedDB lease coordinate tabs, with server
+idempotency as the final safeguard.
+
 The backend validates the request, writes the artwork, `submission.json`, and
 `delivery.json` into a private staging directory, syncs them, and atomically
 publishes the complete directory as the browser-generated UUID. The delivery
 record is a durable filesystem outbox. Resend email and a private Telegram
 channel are supported. Submission never clears the canvas or its IndexedDB
 save; only the form fields reset after a delivered or safely queued response.
+The archive stores a server-computed fingerprint of every accepted field plus
+the exact artwork bytes. Reusing a UUID with different content returns `409`
+without overwriting the archive or starting another delivery.
 
 Delivery state moves from `pending` to `processing` under a durable owner and
 expiry lease, then to `delivered`, back to `pending` with bounded exponential
@@ -200,24 +219,43 @@ SUBMISSION_RATE_LIMIT_MAX=5
 SUBMISSION_RATE_LIMIT_MAX_CLIENTS=10000
 SUBMISSION_CONCURRENT_MAX=2
 SUBMISSION_DELIVERY_LEASE_MS=120000
-SUBMISSION_DELIVERY_TIMEOUT_MS=60000
+SUBMISSION_DELIVERY_TIMEOUT_MS=30000
 SUBMISSION_OUTBOX_INTERVAL_MS=30000
 SUBMISSION_OUTBOX_BATCH_SIZE=20
 SUBMISSION_RETRY_BASE_DELAY_MS=5000
 SUBMISSION_RETRY_MAX_DELAY_MS=900000
 SUBMISSION_RETRY_MAX_ATTEMPTS=10
+SUBMISSION_RETRY_JITTER_PERCENT=20
+SUBMISSION_UNCERTAIN_RETRY_DELAY_MS=300000
+SUBMISSION_UNCERTAIN_MAX_ATTEMPTS=2
+TELEGRAM_RETRY_AFTER_MAX_MS=3600000
 SUBMISSION_STAGING_MAX_AGE_MS=3600000
 SUBMISSION_STORAGE_MAX_BYTES=5368709120
 SUBMISSION_STORAGE_RETENTION_DAYS=0
 ```
 
-The defaults use a two-minute lease and a one-minute provider request timeout,
+The defaults use a two-minute lease and a 30-second explicit provider request timeout,
 scan up to 20 archives every 30 seconds,
 and retry after 5 seconds with exponential backoff capped at 15 minutes for up
-to 10 attempts. Network errors, HTTP 408/409/425/429, and 5xx responses are
-retryable; other provider 4xx responses are permanent. An expired lease is
+to 10 attempts, plus up to 20 percent jitter. HTTP 408/425 and most 5xx
+responses and definitive connection/DNS failures are retryable. HTTP 429 is
+throttled; Telegram's valid `parameters.retry_after` is honored when it is
+longer than local backoff and clamped to one hour. Credential, destination,
+payload, media, and most other 4xx errors are permanent. An expired lease is
 reclaimed automatically. Staging directories abandoned for an hour are
 removed; published UUID directories are never overwritten.
+
+Timeouts or connection loss after transmission may have begun are stored as
+`uncertain`, not as confirmed failures. They wait five minutes before another
+attempt. Resend retries reuse the immutable `pepepaint-<uuid>` idempotency key;
+Resend currently retains keys for 24 hours. Telegram offers no equivalent
+general idempotency or send reconciliation API, so a retry can duplicate a
+message. After two uncertain Telegram attempts the target enters
+`manual_review` instead of retrying without bound. Each provider has independent
+attempt, throttle, retry, uncertainty, message-ID, and terminal state. Overall
+delivery is `delivered` only when every configured provider is confirmed;
+remaining pending/throttled/uncertain work stays queued, and all-terminal
+non-success states become `dead_letter`.
 
 `SUBMISSION_STORAGE_RETENTION_DAYS=0` disables automatic deletion. Before
 enabling retention, agree the archive/backup policy and monitor available disk
@@ -225,11 +263,15 @@ space. Retention never removes pending or processing outbox work. A full
 configured archive returns HTTP 507 without calling Resend or Telegram.
 
 For recovery, inspect `<storage-root>/<uuid>/delivery.json` and service logs.
-Pending work resumes automatically on startup. For `dead_letter`, first fix the
+Pending, throttled, and uncertain work resumes from its persisted deadline on
+startup. Shutdown aborts active provider requests, records them for a later
+retry, releases their filesystem leases, and stops the polling timer. For
+`dead_letter`, first fix the
 provider/configuration problem and preserve a backup of the UUID directory;
-then an operator may atomically replace `delivery.json` with the failed target
-set back to `pending`, `status` set to `pending`, `lease` cleared, and
-`next_attempt_at` set to the current time. Do not edit or delete the artwork or
+then an operator may atomically replace `delivery.json` with only the affected
+target set back to `pending`, its `next_attempt_at` set to the current time,
+its throttle and lease cleared, and the overall state derived accordingly.
+Never reset a target already marked `delivered`. Do not edit or delete the artwork or
 `submission.json`, and keep the original UUID so Resend retains its stable
 idempotency key.
 
