@@ -1,4 +1,4 @@
-export const PEPE_COLOR_LIMITS = Object.freeze({
+export const CROAKAGE_COLOR_LIMITS = Object.freeze({
 	"#588B3D": 0.56,
 	"#A55A35": 0.12,
 	"#D99CFF": 0.04,
@@ -6,15 +6,15 @@ export const PEPE_COLOR_LIMITS = Object.freeze({
 	"#FFFFFF": 0.06,
 	"#0344FF": 0.16,
 });
-export const PEPE_PALETTE = Object.freeze(Object.keys(PEPE_COLOR_LIMITS));
+export const CROAKAGE_PALETTE = Object.freeze(Object.keys(CROAKAGE_COLOR_LIMITS));
 
-const PEPENESS_ALGORITHM_VERSION = 2;
-const STROKE_COUNT_ALGORITHM_VERSION = 1;
-const DURATION_ALGORITHM_VERSION = 1;
-const DISTANCE_TRAVELLED_ALGORITHM_VERSION = 1;
+const CROAKAGE_ALGORITHM_VERSION = 2;
+const RSI_ALGORITHM_VERSION = 1;
+const QUIETUS_ALGORITHM_VERSION = 1;
+const WANDERLUST_ALGORITHM_VERSION = 1;
 const CHAOS_ALGORITHM_VERSION = 1;
-const VARIETY_ALGORITHM_VERSION = 1;
-const DEFAULT_PEPENESS_TOLERANCE = 40;
+const BRUSHINESS_ALGORITHM_VERSION = 1;
+const DEFAULT_CROAKAGE_TOLERANCE = 40;
 const DEFAULT_CHAOS_SAMPLE_WIDTH = 200;
 const CHAOS_COLOR_ENTROPY_WEIGHT = 0.4;
 const CHAOS_EDGE_DENSITY_WEIGHT = 0.35;
@@ -27,28 +27,28 @@ const HUNDRED_YEARS_MS = 100 * 365.25 * 24 * 60 * 60 * 1000;
 function hexToRgb(hex_color) {
 	const match = /^#([0-9a-f]{6})$/i.exec(hex_color);
 	if (!match) {
-		throw new TypeError(`Invalid PEPENESS palette color: ${hex_color}`);
+		throw new TypeError(`Invalid Croakage palette color: ${hex_color}`);
 	}
 
 	const value = Number.parseInt(match[1], 16);
 	return [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
 }
 
-function preparePepenessOptions(tolerance, palette, color_limits) {
+function prepareCroakageOptions(tolerance, palette, color_limits) {
 	const numeric_tolerance = Number(tolerance);
 	if (!Number.isFinite(numeric_tolerance) || numeric_tolerance < 0) {
-		throw new RangeError("PEPENESS tolerance must be a non-negative number.");
+		throw new RangeError("Croakage tolerance must be a non-negative number.");
 	}
 
 	if (!Array.isArray(palette) || palette.length === 0) {
-		throw new TypeError("PEPENESS palette must contain at least one hex color.");
+		throw new TypeError("Croakage palette must contain at least one hex color.");
 	}
 
 	const palette_entries = palette.map((hex_color) => {
 		const normalized_color = String(hex_color).toUpperCase();
 		const maximum_ratio = Number(color_limits[normalized_color]);
 		if (!Number.isFinite(maximum_ratio) || maximum_ratio < 0 || maximum_ratio > 1) {
-			throw new RangeError(`PEPENESS color limit is invalid for ${hex_color}.`);
+			throw new RangeError(`Croakage color limit is invalid for ${hex_color}.`);
 		}
 
 		return {
@@ -65,22 +65,22 @@ function preparePepenessOptions(tolerance, palette, color_limits) {
 	};
 }
 
-export function calculatePepenessFromImageData(
+export function calculateCroakageFromImageData(
 	image_data,
-	{ tolerance = DEFAULT_PEPENESS_TOLERANCE, palette = PEPE_PALETTE, color_limits = PEPE_COLOR_LIMITS } = {},
+	{ tolerance = DEFAULT_CROAKAGE_TOLERANCE, palette = CROAKAGE_PALETTE, color_limits = CROAKAGE_COLOR_LIMITS } = {},
 ) {
 	if (!image_data || !Number.isInteger(image_data.width) || !Number.isInteger(image_data.height) || !ArrayBuffer.isView(image_data.data)) {
-		throw new TypeError("calculatePepenessFromImageData requires ImageData-compatible pixel data.");
+		throw new TypeError("calculateCroakageFromImageData requires ImageData-compatible pixel data.");
 	}
 
 	const width = image_data.width;
 	const height = image_data.height;
 	const total_pixels = width * height;
 	if (width < 0 || height < 0 || image_data.data.length < total_pixels * 4) {
-		throw new RangeError("PEPENESS pixel data does not match its dimensions.");
+		throw new RangeError("Croakage pixel data does not match its dimensions.");
 	}
 
-	const { numeric_tolerance, palette_entries, tolerance_squared } = preparePepenessOptions(tolerance, palette, color_limits);
+	const { numeric_tolerance, palette_entries, tolerance_squared } = prepareCroakageOptions(tolerance, palette, color_limits);
 	const pixels = image_data.data;
 	const matched_coverage_by_color = new Float64Array(palette_entries.length);
 
@@ -143,37 +143,37 @@ export function calculatePepenessFromImageData(
 		tolerance: numeric_tolerance,
 		palette: palette_entries.map(({ hex_color }) => hex_color),
 		colors,
-		algorithm_version: PEPENESS_ALGORITHM_VERSION,
+		algorithm_version: CROAKAGE_ALGORITHM_VERSION,
 	};
 }
 
-export function calculatePepeness(canvas, options = {}) {
+export function calculateCroakage(canvas, options = {}) {
 	if (typeof HTMLCanvasElement === "undefined" || !(canvas instanceof HTMLCanvasElement)) {
-		throw new TypeError("calculatePepeness requires an HTMLCanvasElement.");
+		throw new TypeError("calculateCroakage requires an HTMLCanvasElement.");
 	}
 
 	const context = canvas.getContext("2d", { willReadFrequently: true });
 	if (!context) {
-		throw new Error("Could not read the canvas for PEPENESS analysis.");
+		throw new Error("Could not read the canvas for Croakage analysis.");
 	}
 
-	return calculatePepenessFromImageData(context.getImageData(0, 0, canvas.width, canvas.height), options);
+	return calculateCroakageFromImageData(context.getImageData(0, 0, canvas.width, canvas.height), options);
 }
 
-export function createNumberOfStrokesTrait(stroke_count) {
-	if (!Number.isSafeInteger(stroke_count) || stroke_count < 0) {
-		throw new RangeError("Number of Strokes must be a non-negative integer.");
+export function createRSiTrait(rsi) {
+	if (!Number.isSafeInteger(rsi) || rsi < 0) {
+		throw new RangeError("RSi must be a non-negative integer.");
 	}
 
 	return {
 		name: "RSi (num)",
-		value: stroke_count,
-		algorithm_version: STROKE_COUNT_ALGORITHM_VERSION,
+		value: rsi,
+		algorithm_version: RSI_ALGORITHM_VERSION,
 	};
 }
 
-function formatDuration(duration_ms) {
-	const total_seconds = Math.floor(duration_ms / 1000);
+function formatQuietusElapsedTime(elapsed_ms) {
+	const total_seconds = Math.floor(elapsed_ms / 1000);
 	const days = Math.floor(total_seconds / 86400);
 	const hours = Math.floor((total_seconds % 86400) / 3600);
 	const minutes = Math.floor((total_seconds % 3600) / 60);
@@ -183,59 +183,59 @@ function formatDuration(duration_ms) {
 	return days > 0 ? `${days}d ${clock}` : clock;
 }
 
-export function calculateDuration(started_at, ended_at = Date.now()) {
+export function calculateQuietus(started_at, ended_at = Date.now()) {
 	const numeric_ended_at = Number(ended_at);
 	if (!Number.isFinite(numeric_ended_at) || numeric_ended_at < 0) {
-		throw new RangeError("Duration end time must be a valid timestamp.");
+		throw new RangeError("Quietus end time must be a valid timestamp.");
 	}
 
 	const has_started = Number.isFinite(started_at) && started_at >= 0;
 	const numeric_started_at = has_started ? Number(started_at) : null;
-	const duration_ms = has_started ? Math.max(0, Math.round(numeric_ended_at - numeric_started_at)) : 0;
-	const quietus_percentage = (duration_ms / HUNDRED_YEARS_MS) * 100;
+	const elapsed_ms = has_started ? Math.max(0, Math.round(numeric_ended_at - numeric_started_at)) : 0;
+	const quietus_percentage = (elapsed_ms / HUNDRED_YEARS_MS) * 100;
 
 	return {
 		name: "Quietus (%)",
-		value: Math.round((duration_ms / 1000) * 1000) / 1000,
+		value: Math.round((elapsed_ms / 1000) * 1000) / 1000,
 		unit: "seconds",
-		duration_ms,
+		elapsed_ms,
 		quietus: Math.round(quietus_percentage * 1e12) / 1e12,
-		formatted: formatDuration(duration_ms),
+		formatted: formatQuietusElapsedTime(elapsed_ms),
 		started_at: has_started ? new Date(numeric_started_at).toISOString() : null,
 		ended_at: new Date(numeric_ended_at).toISOString(),
 		has_started,
-		algorithm_version: DURATION_ALGORITHM_VERSION,
+		algorithm_version: QUIETUS_ALGORITHM_VERSION,
 	};
 }
 
-export function createDistanceTravelledTrait(distance, canvas_width, canvas_height) {
-	if (!Number.isFinite(distance) || distance < 0) {
-		throw new RangeError("Distance Travelled must be a non-negative number.");
+export function createWanderlustTrait(wanderlust, canvas_width, canvas_height) {
+	if (!Number.isFinite(wanderlust) || wanderlust < 0) {
+		throw new RangeError("Wanderlust must be a non-negative number.");
 	}
 	if (!Number.isFinite(canvas_width) || canvas_width < 0 || !Number.isFinite(canvas_height) || canvas_height < 0) {
-		throw new RangeError("Distance Travelled requires valid canvas dimensions.");
+		throw new RangeError("Wanderlust requires valid canvas dimensions.");
 	}
 
 	const canvas_diagonal = Math.hypot(canvas_width, canvas_height);
-	const rounded_distance = Math.round(distance * 100) / 100;
+	const rounded_wanderlust = Math.round(wanderlust * 100) / 100;
 
 	return {
 		name: "Wanderlust (px)",
-		value: rounded_distance,
+		value: rounded_wanderlust,
 		unit: "canvas_pixels",
-		formatted: `${Math.round(distance).toLocaleString()} px`,
-		canvas_lengths: canvas_diagonal === 0 ? 0 : Math.round((distance / canvas_diagonal) * 1000) / 1000,
-		algorithm_version: DISTANCE_TRAVELLED_ALGORITHM_VERSION,
+		formatted: `${Math.round(wanderlust).toLocaleString()} px`,
+		canvas_lengths: canvas_diagonal === 0 ? 0 : Math.round((wanderlust / canvas_diagonal) * 1000) / 1000,
+		algorithm_version: WANDERLUST_ALGORITHM_VERSION,
 	};
 }
 
-export function createVarietyTrait(brush_usage) {
-	if (!brush_usage || typeof brush_usage !== "object" || Array.isArray(brush_usage)) {
-		throw new TypeError("Variety requires a brush usage object.");
+export function createBrushinessTrait(brushiness_usage) {
+	if (!brushiness_usage || typeof brushiness_usage !== "object" || Array.isArray(brushiness_usage)) {
+		throw new TypeError("Brushiness requires a brush usage object.");
 	}
 
-	const usage_entries = Object.entries(brush_usage)
-		.filter(([brush_name, stroke_count]) => brush_name.length > 0 && Number.isSafeInteger(stroke_count) && stroke_count > 0)
+	const usage_entries = Object.entries(brushiness_usage)
+		.filter(([brush_name, usage_count]) => brush_name.length > 0 && Number.isSafeInteger(usage_count) && usage_count > 0)
 		.sort(([first_name], [second_name]) => first_name.localeCompare(second_name));
 	const normalized_usage = Object.fromEntries(usage_entries);
 
@@ -244,8 +244,8 @@ export function createVarietyTrait(brush_usage) {
 		value: usage_entries.length,
 		unit: "unique_brushes",
 		brushes_used: usage_entries.map(([brush_name]) => brush_name),
-		brush_usage: normalized_usage,
-		algorithm_version: VARIETY_ALGORITHM_VERSION,
+		brushiness_usage: normalized_usage,
+		algorithm_version: BRUSHINESS_ALGORITHM_VERSION,
 	};
 }
 

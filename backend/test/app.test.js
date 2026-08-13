@@ -4,11 +4,12 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { createSubmissionApp } from "../app.js";
+import { createPng } from "./fixtures.js";
 
-const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
+const PNG = createPng();
 const VALID_WALLET = "tz1VSUr8wwNhLAzempoch5d6hLRiTh8Cjcjb";
 
-function createSubmissionForm(submission_id) {
+function createSubmissionForm(submission_id, artwork = PNG, content_type = "image/png") {
 	const form = new FormData();
 	form.set("submission_id", submission_id);
 	form.set("title", "Integration test artwork");
@@ -18,21 +19,22 @@ function createSubmissionForm(submission_id) {
 	form.set(
 		"traits",
 		JSON.stringify({
-			pepeness: 50,
-			number_of_strokes: 6,
-			duration: "00:00:30",
+			croakage: 50,
+			rsi: 6,
+			quietus_elapsed: "00:00:30",
 			quietus: 9.506e-7,
-			distance_travelled: 120,
+			wanderlust: 120,
 			chaos: 20,
-			variety: 4,
+			brushiness: 4,
 		}),
 	);
-	form.set("artwork", new Blob([PNG], { type: "image/png" }), "artwork.png");
+	form.set("artwork", new Blob([artwork], { type: content_type }), content_type === "image/gif" ? "artwork.gif" : "artwork.png");
 	return form;
 }
 
 async function startApp(options) {
 	const app = createSubmissionApp({ ...options, serve_frontend: false, rate_maximum: 100 });
+	await app.locals.ready;
 	const server = await new Promise((resolve, reject) => {
 		const listening_server = app.listen(0, "127.0.0.1");
 		listening_server.once("listening", () => resolve(listening_server));
@@ -41,7 +43,11 @@ async function startApp(options) {
 	const address = server.address();
 	return {
 		url: `http://127.0.0.1:${address.port}`,
-		close: () => new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
+		close: async () => {
+			await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+			await app.locals.close();
+		},
+		app,
 	};
 }
 
@@ -85,10 +91,39 @@ test("archives before delivery and does not redeliver a completed duplicate", as
 		assert.equal(email_calls, 1);
 		assert.equal(telegram_calls, 1);
 
-		const record = JSON.parse(await readFile(path.join(storage_root, submission_id, "submission.json"), "utf8"));
-		assert.equal(record.email_delivery.status, "sent");
-		assert.equal(record.telegram_delivery.status, "sent");
-		assert.equal(record.telegram_delivery.message_id, 88);
+		const delivery = JSON.parse(await readFile(path.join(storage_root, submission_id, "delivery.json"), "utf8"));
+		assert.equal(delivery.status, "delivered");
+		assert.equal(delivery.targets.email.status, "delivered");
+		assert.equal(delivery.targets.telegram.message_id, 88);
+	} finally {
+		await server.close();
+	}
+});
+
+test("serializes two concurrent requests for the same UUID", async () => {
+	const storage_root = await mkdtemp(path.join(os.tmpdir(), "pepepaint-app-"));
+	const submission_id = crypto.randomUUID();
+	let delivery_calls = 0;
+	const server = await startApp(
+		configuredOptions(storage_root, {
+			telegram_bot_token: "",
+			telegram_chat_id: "",
+			deliver_email: async () => {
+				delivery_calls += 1;
+				await new Promise((resolve) => setTimeout(resolve, 10));
+				return { id: "one-message" };
+			},
+		}),
+	);
+
+	try {
+		const responses = await Promise.all([
+			fetch(`${server.url}/api/submissions`, { method: "POST", body: createSubmissionForm(submission_id) }),
+			fetch(`${server.url}/api/submissions`, { method: "POST", body: createSubmissionForm(submission_id) }),
+		]);
+		assert.deepEqual(responses.map((response) => response.status).sort(), [200, 201]);
+		assert.equal(delivery_calls, 1);
+		assert.equal(JSON.parse(await readFile(path.join(storage_root, submission_id, "delivery.json"), "utf8")).status, "delivered");
 	} finally {
 		await server.close();
 	}
@@ -99,10 +134,12 @@ test("retries only the failed Telegram delivery", async () => {
 	const submission_id = crypto.randomUUID();
 	let email_calls = 0;
 	let telegram_calls = 0;
+	const idempotency_keys = [];
 	const server = await startApp(
 		configuredOptions(storage_root, {
-			deliver_email: async () => {
+			deliver_email: async ({ idempotency_key }) => {
 				email_calls += 1;
+				idempotency_keys.push(idempotency_key);
 				return { id: "email-message-id" };
 			},
 			deliver_telegram: async () => {
@@ -122,18 +159,49 @@ test("retries only the failed Telegram delivery", async () => {
 		} finally {
 			console.error = original_console_error;
 		}
-		assert.equal(first.status, 502);
+		assert.equal(first.status, 202);
+		assert.equal((await first.json()).status, "queued");
 
-		let record = JSON.parse(await readFile(path.join(storage_root, submission_id, "submission.json"), "utf8"));
-		assert.equal(record.email_delivery.status, "sent");
-		assert.equal(record.telegram_delivery.status, "failed");
+		let delivery = JSON.parse(await readFile(path.join(storage_root, submission_id, "delivery.json"), "utf8"));
+		assert.equal(delivery.targets.email.status, "delivered");
+		assert.equal(delivery.targets.telegram.status, "pending");
 
 		const retry = await fetch(`${server.url}/api/submissions`, { method: "POST", body: createSubmissionForm(submission_id) });
-		assert.equal(retry.status, 201);
+		assert.equal(retry.status, 200);
 		assert.equal(email_calls, 1);
 		assert.equal(telegram_calls, 2);
-		record = JSON.parse(await readFile(path.join(storage_root, submission_id, "submission.json"), "utf8"));
-		assert.equal(record.telegram_delivery.status, "sent");
+		assert.deepEqual(idempotency_keys, [`pepepaint-${submission_id}`]);
+		delivery = JSON.parse(await readFile(path.join(storage_root, submission_id, "delivery.json"), "utf8"));
+		assert.equal(delivery.targets.telegram.status, "delivered");
+	} finally {
+		await server.close();
+	}
+});
+
+test("reuses the exact Resend idempotency key across retries", async () => {
+	const storage_root = await mkdtemp(path.join(os.tmpdir(), "pepepaint-app-"));
+	const submission_id = crypto.randomUUID();
+	const keys = [];
+	const server = await startApp(
+		configuredOptions(storage_root, {
+			telegram_bot_token: "",
+			telegram_chat_id: "",
+			deliver_email: async ({ idempotency_key }) => {
+				keys.push(idempotency_key);
+				if (keys.length === 1) throw new Error("temporary Resend timeout");
+				return { id: "resend-message-id" };
+			},
+		}),
+	);
+
+	try {
+		const first = await fetch(`${server.url}/api/submissions`, { method: "POST", body: createSubmissionForm(submission_id) });
+		assert.equal(first.status, 202);
+		const retry = await fetch(`${server.url}/api/submissions`, { method: "POST", body: createSubmissionForm(submission_id) });
+		assert.equal(retry.status, 200);
+		assert.deepEqual(keys, [`pepepaint-${submission_id}`, `pepepaint-${submission_id}`]);
+		const delivered = JSON.parse(await readFile(path.join(storage_root, submission_id, "delivery.json"), "utf8"));
+		assert.equal(delivered.targets.email.message_id, "resend-message-id");
 	} finally {
 		await server.close();
 	}
@@ -163,6 +231,130 @@ test("supports Telegram-only delivery when Resend has no API key", async () => {
 		assert.equal(response.status, 201);
 		assert.equal(email_calls, 0);
 		assert.equal(telegram_calls, 1);
+	} finally {
+		await server.close();
+	}
+});
+
+test("rejects a second request while global submission processing is at capacity", async () => {
+	const storage_root = await mkdtemp(path.join(os.tmpdir(), "pepepaint-app-"));
+	let release_delivery;
+	let delivery_started;
+	const started = new Promise((resolve) => {
+		delivery_started = resolve;
+	});
+	const blocked_delivery = new Promise((resolve) => {
+		release_delivery = resolve;
+	});
+	const server = await startApp(
+		configuredOptions(storage_root, {
+			concurrent_maximum: 1,
+			telegram_bot_token: "",
+			telegram_chat_id: "",
+			deliver_email: async () => {
+				delivery_started();
+				await blocked_delivery;
+				return { id: "email-message-id" };
+			},
+		}),
+	);
+
+	try {
+		const first_request = fetch(`${server.url}/api/submissions`, {
+			method: "POST",
+			body: createSubmissionForm(crypto.randomUUID()),
+		});
+		await started;
+		const busy = await fetch(`${server.url}/api/submissions`, {
+			method: "POST",
+			body: createSubmissionForm(crypto.randomUUID()),
+		});
+		assert.equal(busy.status, 503);
+		assert.equal(busy.headers.get("retry-after"), "5");
+		release_delivery();
+		assert.equal((await first_request).status, 201);
+	} finally {
+		release_delivery();
+		await server.close();
+	}
+});
+
+test("returns storage capacity errors without calling delivery services", async () => {
+	const storage_root = await mkdtemp(path.join(os.tmpdir(), "pepepaint-app-"));
+	let delivery_calls = 0;
+	const server = await startApp(
+		configuredOptions(storage_root, {
+			storage_maximum_bytes: 1,
+			telegram_bot_token: "",
+			telegram_chat_id: "",
+			deliver_email: async () => {
+				delivery_calls += 1;
+				return { id: "unexpected-email" };
+			},
+		}),
+	);
+
+	try {
+		const response = await fetch(`${server.url}/api/submissions`, {
+			method: "POST",
+			body: createSubmissionForm(crypto.randomUUID()),
+		});
+		assert.equal(response.status, 507);
+		assert.equal(delivery_calls, 0);
+	} finally {
+		await server.close();
+	}
+});
+
+test("rejects signature-prefixed malformed artwork before delivery", async () => {
+	const storage_root = await mkdtemp(path.join(os.tmpdir(), "pepepaint-app-"));
+	let delivery_calls = 0;
+	const server = await startApp(
+		configuredOptions(storage_root, {
+			telegram_bot_token: "",
+			telegram_chat_id: "",
+			deliver_email: async () => {
+				delivery_calls += 1;
+				return { id: "unexpected-email" };
+			},
+		}),
+	);
+
+	try {
+		const response = await fetch(`${server.url}/api/submissions`, {
+			method: "POST",
+			body: createSubmissionForm(crypto.randomUUID(), PNG.subarray(0, 8)),
+		});
+		assert.equal(response.status, 400);
+		assert.equal(delivery_calls, 0);
+	} finally {
+		await server.close();
+	}
+});
+
+test("enforces the configured multipart file-size limit", async () => {
+	const storage_root = await mkdtemp(path.join(os.tmpdir(), "pepepaint-app-"));
+	let delivery_calls = 0;
+	const server = await startApp(
+		configuredOptions(storage_root, {
+			max_file_bytes: PNG.length - 1,
+			telegram_bot_token: "",
+			telegram_chat_id: "",
+			deliver_email: async () => {
+				delivery_calls += 1;
+				return { id: "unexpected-email" };
+			},
+		}),
+	);
+
+	try {
+		const response = await fetch(`${server.url}/api/submissions`, {
+			method: "POST",
+			body: createSubmissionForm(crypto.randomUUID()),
+		});
+		assert.equal(response.status, 400);
+		assert.deepEqual(await response.json(), { error: "Artwork is too large." });
+		assert.equal(delivery_calls, 0);
 	} finally {
 		await server.close();
 	}
