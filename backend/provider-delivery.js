@@ -107,7 +107,6 @@ export async function withProviderDeadline(provider, operation, options = {}) {
 			request_may_have_reached_provider: dispatched,
 		}));
 	}, timeout_ms);
-	timeout.unref?.();
 	try {
 		if (cancelled) return await deadline;
 		dispatched = true;
