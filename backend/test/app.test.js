@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -259,6 +259,7 @@ test("supports Telegram-only delivery when Resend has no API key", async () => {
 	const server = await startApp(
 		configuredOptions(storage_root, {
 			api_key: "",
+			email_enabled: false,
 			deliver_email: async () => {
 				email_calls += 1;
 				return { id: "unexpected-email" };
@@ -428,4 +429,104 @@ test("enforces the configured multipart file-size limit", async () => {
 	} finally {
 		await server.close();
 	}
+});
+
+test("health stays live while readiness gates new uploads and reconciles an archived UUID read-only", async () => {
+	const storage_root = await mkdtemp(path.join(os.tmpdir(), "pepepaint-app-ready-"));
+	const submission_id = crypto.randomUUID();
+	let delivery_calls = 0;
+	const server = await startApp(configuredOptions(storage_root, {
+		telegram_bot_token: "",
+		telegram_chat_id: "",
+		deliver_email: async () => {
+			delivery_calls += 1;
+			return { id: "delivered-before-fault" };
+		},
+	}));
+	try {
+		assert.deepEqual(await (await fetch(`${server.url}/api/health`)).json(), { status: "ok" });
+		assert.equal((await fetch(`${server.url}/api/ready`)).status, 200);
+		assert.equal((await fetch(`${server.url}/api/submissions`, {
+			method: "POST",
+			headers: { "X-Submission-ID": submission_id },
+			body: createSubmissionForm(submission_id),
+		})).status, 201);
+		server.app.locals.readiness.markDurabilityFailure("test_fault", Object.assign(new Error("private /path"), { code: "EROFS" }));
+		const readiness = await fetch(`${server.url}/api/ready`);
+		assert.equal(readiness.status, 503);
+		assert.deepEqual(await readiness.json(), {
+			status: "not_ready",
+			checks: { configuration: "ok", archive: "failed", outbox: "failed", delivery: "ok" },
+		});
+		assert.equal((await fetch(`${server.url}/api/health`)).status, 200);
+		const rejected = await fetch(`${server.url}/api/submissions`, { method: "POST", body: createSubmissionForm(crypto.randomUUID()) });
+		assert.equal(rejected.status, 503);
+		assert.equal(rejected.headers.get("retry-after"), "10");
+		const reconciled = await fetch(`${server.url}/api/submissions`, {
+			method: "POST",
+			headers: { "X-Submission-ID": submission_id },
+			body: createSubmissionForm(submission_id),
+		});
+		assert.equal(reconciled.status, 200);
+		assert.equal(delivery_calls, 1);
+	} finally {
+		await server.close();
+	}
+});
+
+test("a runtime archive write failure returns 503 and invalidates readiness", async () => {
+	const storage_root = await mkdtemp(path.join(os.tmpdir(), "pepepaint-app-write-fault-"));
+	const server = await startApp(configuredOptions(storage_root, {
+		telegram_bot_token: "",
+		telegram_chat_id: "",
+		archive_submission: async () => { throw Object.assign(new Error("private archive path"), { code: "EROFS" }); },
+		deliver_email: async () => { throw new Error("provider must not be called"); },
+	}));
+	try {
+		const response = await fetch(`${server.url}/api/submissions`, {
+			method: "POST",
+			headers: { "X-Submission-ID": crypto.randomUUID() },
+			body: createSubmissionForm(crypto.randomUUID()),
+		});
+		assert.equal(response.status, 503);
+		assert.equal((await fetch(`${server.url}/api/ready`)).status, 503);
+		assert.deepEqual(await readdir(storage_root), []);
+	} finally {
+		await server.close();
+	}
+});
+
+test("startup probe and worker failures reject initialization before provider work", async () => {
+	const storage_root = await mkdtemp(path.join(os.tmpdir(), "pepepaint-app-startup-fault-"));
+	let provider_calls = 0;
+	const probe_failure_app = createSubmissionApp(configuredOptions(storage_root, {
+		serve_frontend: false,
+		telegram_bot_token: "",
+		telegram_chat_id: "",
+		logger: { error() {}, info() {} },
+		readiness_probe: async () => { throw Object.assign(new Error("unusable archive"), { code: "EROFS" }); },
+		deliver_email: async () => { provider_calls += 1; },
+	}));
+	await assert.rejects(probe_failure_app.locals.ready, /unusable archive/);
+	assert.equal(provider_calls, 0);
+	await probe_failure_app.locals.close();
+
+	let worker_started = 0;
+	const worker_failure = {
+		async start() { worker_started += 1; throw new Error("worker schema incompatible"); },
+		async close() {},
+		async process() { provider_calls += 1; },
+	};
+	const worker_failure_app = createSubmissionApp(configuredOptions(storage_root, {
+		serve_frontend: false,
+		telegram_bot_token: "",
+		telegram_chat_id: "",
+		logger: { error() {}, info() {} },
+		delivery_processor: worker_failure,
+		deliver_email: async () => { provider_calls += 1; },
+	}));
+	await assert.rejects(worker_failure_app.locals.ready, /worker schema incompatible/);
+	assert.equal(worker_started, 1);
+	assert.equal(provider_calls, 0);
+	await worker_failure_app.locals.close();
 });

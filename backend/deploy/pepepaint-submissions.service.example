@@ -7,16 +7,17 @@ Wants=network-online.target
 Type=simple
 User=pepepaint
 Group=pepepaint
-WorkingDirectory=/var/www/pepepaint/backend
+WorkingDirectory=/var/www/pepepaint/current/backend
 EnvironmentFile=/etc/pepepaint/submissions.env
-ExecStart=/usr/bin/node server.js
-Restart=on-failure
+ExecStart=/usr/bin/node /var/www/pepepaint/current/backend/server.js
+Restart=on-abnormal
 RestartSec=5
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/var/lib/pepepaint/submissions
+TimeoutStopSec=150
 
 [Install]
 WantedBy=multi-user.target

@@ -60,14 +60,14 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for more detail and [AGENTS.md](AGENTS.md
 
 Production is hosted at <https://pepepaint.journeypaint.fun> on the same VPS as JourneyPaint, but uses an isolated deployment user, web directory, Nginx site, and TLS certificate.
 
-Every push to `main` triggers the [Deploy PEPEPAINT workflow](.github/workflows/deploy.yml). The workflow:
+Every push to `main` triggers the [Deploy PEPEPAINT workflow](.github/workflows/deploy.yml). After the one-time versioned-release migration, the workflow:
 
 1. Checks out the committed `main` branch.
-2. Authenticates to the VPS with a dedicated deployment key stored as a GitHub Actions secret.
-3. Synchronises the frontend files to `/var/www/pepepaint/current`.
-4. Synchronises the backend runtime files to `/var/www/pepepaint/backend` without touching its environment or archive.
-5. Installs locked production dependencies and restarts `pepepaint-submissions.service` through a narrowly scoped sudo rule.
-6. Verifies the website, `traits.js`, and the public API health endpoint.
+2. Completes all frontend, backend, deployment-script, and dependency-audit checks before configuring SSH.
+3. Builds and checksums one allowlisted frontend/backend release identified by the full Git SHA and GitHub run metadata.
+4. Uploads and validates it in a new same-filesystem staging directory without changing the live release.
+5. Atomically switches `current`, restarts the backend, and verifies private and public health/readiness plus the exact public release manifest.
+6. Automatically restores, restarts, and verifies the previous release if any post-activation check fails.
 
 The workflow deploys these frontend files:
 
@@ -94,17 +94,18 @@ The workflow can also be started from GitHub:
 2. Select **Deploy PEPEPAINT**.
 3. Choose **Run workflow** on the `main` branch.
 
-### Rollback
+### Versioned releases and rollback
 
-To undo a deployed change without rewriting Git history:
+Frontend and backend are deployed as one immutable compatibility unit under
+`/var/www/pepepaint/releases`; configuration and the archive/outbox remain
+external. Manual rollback selects an existing exact release ID through the
+protected workflow and uses the same lock, compatibility guard, atomic pointer
+operation, restart, and readiness checks as automatic rollback.
 
-```sh
-git log --oneline
-git revert <commit-hash>
-git push
-```
-
-The revert commit triggers a new deployment. If deployment fails, investigate the failed Actions run before making unrelated changes.
+The complete filesystem layout, release ID format, transaction, retention,
+failure recovery, minimal administrator changes, and one-time migration are in
+[deployment/README.md](deployment/README.md). The migration is deliberately not
+run by the normal workflow.
 
 ### Deployment security
 
@@ -186,7 +187,8 @@ npm ci
 cp .env.example .env
 ```
 
-Set either the Resend variables, the Telegram variables, or both, then run:
+Set `RESEND_ENABLED=true`, `TELEGRAM_ENABLED=true`, or both and complete every
+variable for each enabled provider, then run:
 
 ```sh
 npm start
@@ -202,10 +204,13 @@ Example systemd and Nginx configurations are in `backend/deploy/`. The productio
 
 ```text
 PORT=3101
+BIND_HOST=127.0.0.1
 APP_ENV=production
+RESEND_ENABLED=true
 RESEND_API_KEY=...
 SUBMISSION_FROM_EMAIL=PEPEPAINT <submissions@pepepaint.journeypaint.fun>
 SUBMISSION_TO_EMAIL=your-private-address@example.com
+TELEGRAM_ENABLED=true
 TELEGRAM_BOT_TOKEN=...
 TELEGRAM_CHAT_ID=-1001234567890
 SUBMISSION_STORAGE_ROOT=/var/lib/pepepaint/submissions
@@ -232,7 +237,61 @@ TELEGRAM_RETRY_AFTER_MAX_MS=3600000
 SUBMISSION_STAGING_MAX_AGE_MS=3600000
 SUBMISSION_STORAGE_MAX_BYTES=5368709120
 SUBMISSION_STORAGE_RETENTION_DAYS=0
+READINESS_PROBE_INTERVAL_MS=30000
+READINESS_PROBE_TIMEOUT_MS=5000
+READINESS_RETRY_AFTER_SECONDS=10
 ```
+
+Production startup validation is strict. `SUBMISSION_STORAGE_ROOT`, explicit
+provider enablement, and at least one complete provider are required. Email
+requires a structurally valid API key, sender, and destination; Telegram
+requires both a structurally valid bot token and numeric chat ID. Invalid
+booleans, integers, bounds, retry relationships, undersized leases, placeholder
+production values, and a storage quota too small for one maximum submission are
+fatal. Development and tests may inject fake provider functions, but normal
+production startup never sends a provider test message or makes an authentication
+request. Configuration errors name only the environment key and a safe reason.
+
+The archive must be outside the public web root. Before the listener or outbox
+worker starts, the service creates the root if needed, rejects a regular file or
+an exact-root symbolic link, and uses a uniquely named private probe directory.
+It creates and fsyncs a file, atomically renames and reads it back, exercises the
+same temporary-file replacement used by `delivery.json`, syncs the directory,
+then removes only that exact probe directory. The probe is bounded by
+`READINESS_PROBE_TIMEOUT_MS`. A fatal probe, cleanup, schema, or worker-start
+failure exits non-zero before HTTP is accepted or provider work begins.
+
+`GET /api/health` is lightweight liveness and retains `{ "status": "ok" }`:
+it means the HTTP process can answer, not that submissions are safe to accept.
+`GET /api/ready` returns HTTP 200 with `status: "ready"`, or HTTP 503 with
+`status: "not_ready"` and sanitized configuration/archive/outbox/delivery check
+names. It performs no filesystem or provider work; it reads cached state.
+Readiness means configuration is valid, archive and outbox atomic writes work,
+the worker initialized, capacity is available, and shutdown has not begun.
+
+Archive/write/rename/outbox faults make readiness false immediately. New
+submissions are rejected before multipart buffering with HTTP 503 and a bounded
+`Retry-After`; configured hard capacity returns HTTP 507. Browser retries send
+the existing UUID in `X-Submission-ID`, allowing an already archived UUID to
+receive its stable state through read-only reconciliation even while new writes
+are gated. A single non-overlapping, unref'd recovery timer repeats the bounded
+probe every `READINESS_PROBE_INTERVAL_MS`; success restores readiness when
+capacity is also available. Shutdown marks not-ready before stopping the worker
+and HTTP listener.
+
+Provider throttling, backoff, uncertain delivery, queued work, or a temporary
+provider outage is delivery degradation, not loss of readiness: the durable
+outbox can retain it safely. `/api/ready` may therefore show
+`delivery: "degraded"` while still returning 200. A permanent startup configuration error
+for an enabled provider is different and is fatal. Diagnose a 503 using the
+sanitized service log reason/code and filesystem capacity/permissions; readiness
+responses never include credentials, destinations, archive paths, submission
+data, stack traces, or raw exceptions.
+
+Startup validates existing outbox schemas before declaring the worker ready,
+then defers due provider attempts until initialization has completed. This keeps
+corrupt/incompatible durable state startup-fatal without making listener startup
+wait on Resend or Telegram.
 
 The defaults use a two-minute lease and a 30-second explicit provider request timeout,
 scan up to 20 archives every 30 seconds,
@@ -275,7 +334,7 @@ Never reset a target already marked `delivered`. Do not edit or delete the artwo
 `submission.json`, and keep the original UUID so Resend retains its stable
 idempotency key.
 
-The workflow deploys the backend runtime and restarts its service, but does not deploy secrets, server configuration, tests, or archived submissions. Do not place the backend archive beneath the public Nginx document root.
+The workflow deploys the backend runtime and restarts its service, but does not deploy secrets, server configuration, tests, or archived submissions. Do not place the backend archive beneath the public Nginx document root. Versioned deployment requires the example `/api/ready` Nginx location and the one-time migration in [deployment/README.md](deployment/README.md) to be completed and verified first.
 
 ## License and bundled assets
 

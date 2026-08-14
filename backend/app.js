@@ -23,23 +23,19 @@ import {
 	readDeliveryRecord,
 } from "./delivery-outbox.js";
 import { withProviderDeadline } from "./provider-delivery.js";
+import { loadConfiguration } from "./config.js";
+import { ReadinessManager } from "./readiness.js";
 
 const backend_directory = path.dirname(fileURLToPath(import.meta.url));
 const project_directory = path.resolve(backend_directory, "..");
 
-function positiveInteger(value, fallback) {
-	const parsed = Number.parseInt(value, 10);
-	return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
-}
+const SUBMISSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const DURABILITY_ERROR_CODES = new Set([
+	"EACCES", "EBUSY", "EDQUOT", "EIO", "EMFILE", "ENFILE", "ENOSPC", "ENOTDIR", "EPERM", "EROFS", "ESTALE", "EXDEV",
+]);
 
-function nonNegativeInteger(value, fallback) {
-	const parsed = Number.parseInt(value, 10);
-	return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : fallback;
-}
-
-function boundedInteger(value, fallback, minimum, maximum) {
-	const parsed = Number.parseInt(value, 10);
-	return Number.isSafeInteger(parsed) && parsed >= minimum && parsed <= maximum ? parsed : fallback;
+function isDurabilityError(error) {
+	return DURABILITY_ERROR_CODES.has(error?.code);
 }
 
 function createRateLimiter({ window_ms, maximum, maximum_clients }) {
@@ -147,60 +143,12 @@ function createStorageGuard(configuration) {
 }
 
 export function createSubmissionApp(options = {}) {
-	const configuration = {
-		storage_root: path.resolve(options.storage_root ?? process.env.SUBMISSION_STORAGE_ROOT ?? path.join(backend_directory, "var/submissions")),
-		api_key: options.api_key ?? process.env.RESEND_API_KEY,
-		from: options.from ?? process.env.SUBMISSION_FROM_EMAIL,
-		to: options.to ?? process.env.SUBMISSION_TO_EMAIL,
-		telegram_bot_token: options.telegram_bot_token ?? process.env.TELEGRAM_BOT_TOKEN,
-		telegram_chat_id: options.telegram_chat_id ?? process.env.TELEGRAM_CHAT_ID,
-		max_file_bytes: positiveInteger(options.max_file_bytes ?? process.env.SUBMISSION_MAX_FILE_BYTES, 12 * 1024 * 1024),
-		max_artwork_width: positiveInteger(options.max_artwork_width ?? process.env.SUBMISSION_MAX_ARTWORK_WIDTH, 400),
-		max_artwork_height: positiveInteger(options.max_artwork_height ?? process.env.SUBMISSION_MAX_ARTWORK_HEIGHT, 560),
-		max_artwork_pixels: positiveInteger(options.max_artwork_pixels ?? process.env.SUBMISSION_MAX_ARTWORK_PIXELS, 400 * 560),
-		max_gif_frames: positiveInteger(options.max_gif_frames ?? process.env.SUBMISSION_MAX_GIF_FRAMES, 32),
-		rate_window_ms: positiveInteger(options.rate_window_ms ?? process.env.SUBMISSION_RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
-		rate_maximum: positiveInteger(options.rate_maximum ?? process.env.SUBMISSION_RATE_LIMIT_MAX, 5),
-		rate_maximum_clients: positiveInteger(options.rate_maximum_clients ?? process.env.SUBMISSION_RATE_LIMIT_MAX_CLIENTS, 10000),
-		concurrent_maximum: positiveInteger(options.concurrent_maximum ?? process.env.SUBMISSION_CONCURRENT_MAX, 2),
-		storage_maximum_bytes: nonNegativeInteger(
-			options.storage_maximum_bytes ?? process.env.SUBMISSION_STORAGE_MAX_BYTES,
-			5 * 1024 * 1024 * 1024,
-		),
-		storage_retention_days: nonNegativeInteger(options.storage_retention_days ?? process.env.SUBMISSION_STORAGE_RETENTION_DAYS, 0),
-		lease_ms: boundedInteger(options.lease_ms ?? process.env.SUBMISSION_DELIVERY_LEASE_MS, 120_000, 5_000, 10 * 60_000),
-		delivery_timeout_ms: boundedInteger(options.delivery_timeout_ms ?? process.env.SUBMISSION_DELIVERY_TIMEOUT_MS, 30_000, 1_000, 120_000),
-		outbox_interval_ms: boundedInteger(options.outbox_interval_ms ?? process.env.SUBMISSION_OUTBOX_INTERVAL_MS, 30_000, 0, 10 * 60_000),
-		retry_base_delay_ms: boundedInteger(options.retry_base_delay_ms ?? process.env.SUBMISSION_RETRY_BASE_DELAY_MS, 5_000, 1_000, 60 * 60_000),
-		retry_maximum_delay_ms: boundedInteger(
-			options.retry_maximum_delay_ms ?? process.env.SUBMISSION_RETRY_MAX_DELAY_MS,
-			15 * 60_000,
-			1_000,
-			24 * 60 * 60_000,
-		),
-		retry_maximum_attempts: boundedInteger(options.retry_maximum_attempts ?? process.env.SUBMISSION_RETRY_MAX_ATTEMPTS, 10, 1, 100),
-		uncertain_delay_ms: boundedInteger(options.uncertain_delay_ms ?? process.env.SUBMISSION_UNCERTAIN_RETRY_DELAY_MS, 5 * 60_000, 1_000, 24 * 60 * 60_000),
-		maximum_uncertain_attempts: boundedInteger(options.maximum_uncertain_attempts ?? process.env.SUBMISSION_UNCERTAIN_MAX_ATTEMPTS, 2, 1, 10),
-		telegram_retry_after_maximum_ms: boundedInteger(options.telegram_retry_after_maximum_ms ?? process.env.TELEGRAM_RETRY_AFTER_MAX_MS, 60 * 60_000, 1_000, 24 * 60 * 60_000),
-		retry_jitter_percent: boundedInteger(options.retry_jitter_percent ?? process.env.SUBMISSION_RETRY_JITTER_PERCENT, 20, 0, 50),
-		outbox_batch_size: positiveInteger(options.outbox_batch_size ?? process.env.SUBMISSION_OUTBOX_BATCH_SIZE, 20),
-		staging_maximum_age_ms: positiveInteger(
-			options.staging_maximum_age_ms ?? process.env.SUBMISSION_STAGING_MAX_AGE_MS,
-			60 * 60_000,
-		),
-	};
+	const configuration = options.configuration ?? loadConfiguration(options, options.environment ?? process.env);
 	const deliver_email = options.deliver_email ?? sendWithResend;
 	const deliver_telegram = options.deliver_telegram ?? sendWithTelegram;
-	const email_values = [configuration.api_key, configuration.from, configuration.to];
-	const telegram_values = [configuration.telegram_bot_token, configuration.telegram_chat_id];
-	const email_requested = Boolean(configuration.api_key);
-	const telegram_requested = telegram_values.some(Boolean);
-	const email_configured = email_requested && email_values.every(Boolean);
-	const telegram_configured = telegram_requested && telegram_values.every(Boolean);
-	const delivery_partially_configured =
-		(email_requested && !email_configured) || (telegram_requested && !telegram_configured);
-	const delivery_targets = [email_configured ? "email" : null, telegram_configured ? "telegram" : null].filter(Boolean);
-	const telegram_destination_fingerprint = telegram_configured
+	const archive_submission = options.archive_submission ?? archiveSubmission;
+	const delivery_targets = [configuration.email_enabled ? "email" : null, configuration.telegram_enabled ? "telegram" : null].filter(Boolean);
+	const telegram_destination_fingerprint = configuration.telegram_enabled
 		? createHash("sha256").update(String(configuration.telegram_chat_id)).digest("hex").slice(0, 16)
 		: null;
 	const app = express();
@@ -227,7 +175,30 @@ export function createSubmissionApp(options = {}) {
 	const concurrency_limit = createConcurrencyLimiter(configuration.concurrent_maximum);
 	const reserve_storage = createStorageGuard(configuration);
 	const uuid_serializer = createKeyedSerializer();
-	const delivery_processor = new DeliveryOutboxProcessor({
+	const readiness = options.readiness_manager ?? new ReadinessManager({
+		storage_root: configuration.storage_root,
+		probe: options.readiness_probe,
+		probe_timeout_ms: configuration.readiness_probe_timeout_ms,
+		probe_interval_ms: configuration.readiness_probe_interval_ms,
+		clock: options.clock,
+		logger: options.logger,
+		capacity_check: async () => {
+			if (configuration.storage_maximum_bytes === 0) return false;
+			try {
+				await enforceSubmissionStoragePolicy(configuration.storage_root, {
+					submission_id: "00000000-0000-4000-8000-000000000000",
+					incoming_bytes: 1,
+					maximum_bytes: configuration.storage_maximum_bytes,
+					retention_ms: 0,
+				});
+				return false;
+			} catch (error) {
+				if (error instanceof SubmissionStorageCapacityError) return true;
+				throw error;
+			}
+		},
+	});
+	const delivery_processor = options.delivery_processor ?? new DeliveryOutboxProcessor({
 		storage_root: configuration.storage_root,
 		targets: delivery_targets,
 		lease_ms: configuration.lease_ms,
@@ -241,6 +212,8 @@ export function createSubmissionApp(options = {}) {
 		jitter_ratio: configuration.retry_jitter_percent / 100,
 		random: options.random,
 		logger: options.logger,
+		on_durability_fault: (error) => readiness.markDurabilityFailure("outbox_write_failed", error),
+		on_provider_outcome: (outcome) => readiness.markDeliveryDegraded(outcome.classification !== "delivered"),
 		batch_size: configuration.outbox_batch_size,
 		clock: options.clock,
 		deliver: async (target_name, { record, artwork_buffer, submission_id, signal }) => {
@@ -268,25 +241,60 @@ export function createSubmissionApp(options = {}) {
 		},
 	});
 	const ready = (async () => {
-		await cleanupAbandonedStagingDirectories(configuration.storage_root, {
-			maximum_age_ms: configuration.staging_maximum_age_ms,
-		});
-		if (!delivery_partially_configured && delivery_targets.length > 0) await delivery_processor.start();
+		try {
+			await readiness.initialize();
+			await cleanupAbandonedStagingDirectories(configuration.storage_root, {
+				maximum_age_ms: configuration.staging_maximum_age_ms,
+			});
+			if (delivery_targets.length > 0) await delivery_processor.start({ defer_processing: true });
+			readiness.markWorkerReady();
+		} catch (error) {
+			readiness.markDurabilityFailure("startup_initialization_failed", error);
+			await delivery_processor.close().catch(() => {});
+			throw error;
+		}
 	})();
 	app.locals.delivery_processor = delivery_processor;
+	app.locals.configuration = configuration;
+	app.locals.readiness = readiness;
 	app.locals.ready = ready;
-	app.locals.close = () => delivery_processor.close();
+	app.locals.beginShutdown = () => readiness.beginShutdown();
+	app.locals.close = async () => {
+		readiness.beginShutdown();
+		await delivery_processor.close();
+		readiness.close();
+	};
 
 	app.get("/api/health", (_request, response) => response.json({ status: "ok" }));
-	app.post("/api/submissions", rate_limit, concurrency_limit, upload.single("artwork"), async (request, response, next) => {
+	app.get("/api/ready", (_request, response) => response.status(readiness.ready ? 200 : 503).json(readiness.publicSnapshot()));
+	const readiness_gate = async (request, response, next) => {
+		if (readiness.ready) return next();
+		const submission_id = request.get("X-Submission-ID");
+		if (submission_id && SUBMISSION_ID_PATTERN.test(submission_id)) {
+			try {
+				const archived = await readArchivedSubmission(configuration.storage_root, submission_id);
+				if (archived) {
+					const delivery = await readDeliveryRecord(configuration.storage_root, submission_id);
+					if (delivery?.status === "delivered") return response.status(200).json({ submission_id, status: "submitted" });
+					if (delivery?.status === "dead_letter") return response.status(502).json({ submission_id, status: "failed", error: "The archived submission requires operator review." });
+					if (delivery?.status === "uncertain") return response.status(202).json({ submission_id, status: "uncertain", message: "Your artwork is safely archived; provider confirmation is pending." });
+					return response.status(202).json({ submission_id, status: "queued", message: "Your artwork is safely archived and queued for delivery." });
+				}
+			} catch (error) {
+				readiness.markDurabilityFailure("archive_read_failed", error);
+			}
+		}
+		if (readiness.storage_full) {
+			response.status(507).json({ error: "Submission storage is currently full. Please try again later." });
+			return;
+		}
+		response.set("Retry-After", String(configuration.readiness_retry_after_seconds));
+		response.status(503).json({ error: "Submission service is temporarily unavailable. Please try again." });
+	};
+	app.post("/api/submissions", rate_limit, readiness_gate, concurrency_limit, upload.single("artwork"), async (request, response, next) => {
 		let release_storage = () => {};
 		let storage_committed = false;
 		try {
-			if (delivery_partially_configured || (!email_configured && !telegram_configured)) {
-				response.status(503).json({ error: "Submission delivery is not fully configured." });
-				return;
-			}
-
 			await ready;
 			const submission = validateSubmission(request.body, request.file, {
 				max_width: configuration.max_artwork_width,
@@ -296,7 +304,7 @@ export function createSubmissionApp(options = {}) {
 			});
 			const result = await uuid_serializer.run(submission.submission_id, async () => {
 				release_storage = await reserve_storage(submission);
-				const archived = await archiveSubmission(configuration.storage_root, submission, {
+				const archived = await archive_submission(configuration.storage_root, submission, {
 					delivery_targets,
 					staging_maximum_age_ms: configuration.staging_maximum_age_ms,
 				});
@@ -340,6 +348,10 @@ export function createSubmissionApp(options = {}) {
 				message: "Your artwork is safely archived and queued for delivery.",
 			});
 		} catch (error) {
+			if (error instanceof SubmissionStorageCapacityError) void readiness.runProbe().catch(() => {});
+			else if (isDurabilityError(error)) {
+				readiness.markDurabilityFailure("archive_write_failed", error);
+			}
 			next(error);
 		} finally {
 			release_storage(storage_committed);
@@ -372,12 +384,17 @@ export function createSubmissionApp(options = {}) {
 			response.status(507).json({ error: "Submission storage is currently full. Please try again later." });
 			return;
 		}
+		if (isDurabilityError(error)) {
+			response.set("Retry-After", String(configuration.readiness_retry_after_seconds));
+			response.status(503).json({ error: "Submission service is temporarily unavailable. Please try again." });
+			return;
+		}
 		if (error instanceof multer.MulterError) {
 			const message = error.code === "LIMIT_FILE_SIZE" ? "Artwork is too large." : "The submission upload is invalid.";
 			response.status(400).json({ error: message });
 			return;
 		}
-		console.error("PEPEPAINT submission failed.", error);
+		console.error("PEPEPAINT submission failed.", { name: error?.name ?? "Error", code: error?.code ?? "UNKNOWN" });
 		response.status(502).json({ error: "The submission could not be delivered. Your artwork is still on this device; please try again." });
 	});
 

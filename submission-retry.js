@@ -314,6 +314,7 @@ export class SubmissionRetryClient {
 			try {
 				const response = await this.fetch_impl("/api/submissions", {
 					method: "POST",
+					headers: { "X-Submission-ID": uuid },
 					body: formDataFromAttempt(record),
 					signal: controller.signal,
 				});

@@ -390,3 +390,24 @@ test("an expired processing attempt recovers as uncertain without immediate rese
 	assert.equal(calls, 0);
 	await processor.close();
 });
+
+test("a persistent outbox scan fault is reported to readiness without a provider call", async () => {
+	const storage_root = await mkdtemp(path.join(os.tmpdir(), "pepepaint-outbox-fault-"));
+	const submission = createSubmission();
+	const directory = path.join(storage_root, submission.submission_id);
+	await mkdir(directory);
+	await writeFile(path.join(directory, "delivery.json"), JSON.stringify({ schema_version: 99 }));
+	let fault;
+	let provider_calls = 0;
+	const processor = new DeliveryOutboxProcessor({
+		storage_root,
+		targets: ["email"],
+		interval_ms: 0,
+		on_durability_fault: (error) => { fault = error; },
+		deliver: async () => { provider_calls += 1; },
+	});
+	await assert.rejects(processor.start(), /Unsupported delivery outbox schema/);
+	assert.match(fault.message, /Unsupported delivery outbox schema/);
+	assert.equal(provider_calls, 0);
+	await processor.close();
+});

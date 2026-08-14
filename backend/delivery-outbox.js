@@ -327,18 +327,33 @@ export class DeliveryOutboxProcessor {
 		this.batch_size = options.batch_size ?? 20;
 		this.serializer = createKeyedSerializer();
 		this.timer = null;
+		this.initial_scan_timer = null;
 		this.closed = false;
 		this.scan_promise = null;
 		this.shutdown_controller = new AbortController();
 		this.active = new Set();
 		this.logger = options.logger ?? console;
+		this.on_durability_fault = options.on_durability_fault ?? (() => {});
+		this.on_provider_outcome = options.on_provider_outcome ?? (() => {});
 	}
 
-	async start() {
+	async start(options = {}) {
 		await mkdir(this.storage_root, { recursive: true, mode: 0o700 });
-		await this.processDue();
+		try {
+			await this.validateState();
+		} catch (error) {
+			this.on_durability_fault(error);
+			throw error;
+		}
+		if (options.defer_processing) {
+			this.initial_scan_timer = setImmediate(() => {
+				this.initial_scan_timer = null;
+				void this.processDue().catch((error) => this.logger.error?.("Initial outbox scan failed.", { code: error?.code ?? "UNKNOWN" }));
+			});
+			this.initial_scan_timer.unref?.();
+		} else await this.processDue();
 		if (!this.closed && this.interval_ms > 0) {
-			this.timer = setInterval(() => void this.processDue().catch((error) => console.error("Outbox scan failed.", error)), this.interval_ms);
+			this.timer = setInterval(() => void this.processDue().catch((error) => this.logger.error?.("Outbox scan failed.", { code: error?.code ?? "UNKNOWN" })), this.interval_ms);
 			this.timer.unref?.();
 		}
 	}
@@ -346,10 +361,21 @@ export class DeliveryOutboxProcessor {
 	async close() {
 		this.closed = true;
 		this.shutdown_controller.abort(new Error("Outbox is shutting down"));
+		if (this.initial_scan_timer) clearImmediate(this.initial_scan_timer);
+		this.initial_scan_timer = null;
 		if (this.timer) clearInterval(this.timer);
 		this.timer = null;
 		await this.scan_promise;
 		await Promise.allSettled([...this.active]);
+	}
+
+	async validateState() {
+		const entries = await readdir(this.storage_root, { withFileTypes: true });
+		for (const entry of entries) {
+			if (!entry.isDirectory() || !SUBMISSION_ID_PATTERN.test(entry.name)) continue;
+			const delivery = await readDeliveryRecord(this.storage_root, entry.name);
+			if (!delivery) JSON.parse(await readFile(path.join(this.storage_root, entry.name, "submission.json"), "utf8"));
+		}
 	}
 
 	async processDue() {
@@ -357,6 +383,9 @@ export class DeliveryOutboxProcessor {
 		this.scan_promise = this.#scan();
 		try {
 			return await this.scan_promise;
+		} catch (error) {
+			this.on_durability_fault(error);
+			throw error;
 		} finally {
 			this.scan_promise = null;
 		}
@@ -534,6 +563,9 @@ export class DeliveryOutboxProcessor {
 		this.active.add(work);
 		try {
 			return await work;
+		} catch (error) {
+			this.on_durability_fault(error);
+			throw error;
 		} finally {
 			this.active.delete(work);
 		}
@@ -547,6 +579,7 @@ export class DeliveryOutboxProcessor {
 	}
 
 	#log(target_name, submission_id, attempt, outcome, target_status, next_attempt_at, started_at, finished_at) {
+		this.on_provider_outcome(outcome);
 		this.logger.info?.("Provider delivery outcome", {
 			provider: outcome.provider,
 			submission: submission_id.slice(0, 8),

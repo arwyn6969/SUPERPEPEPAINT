@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+IFS=$'\n\t'
+
+root='/var/www/pepepaint'
+environment_file='/etc/pepepaint/submissions.env'
+release_pattern='^[0-9a-f]{40}-[1-9][0-9]{0,19}-[1-9][0-9]{0,5}$'
+
+[[ $# -eq 2 && $1 == staging && $2 =~ $release_pattern ]] || { echo 'invalid release validation request' >&2; exit 2; }
+release_id=$2
+directory="$root/releases/.staging-$release_id"
+[[ -d "$root" && ! -L "$root" && -d "$root/releases" && ! -L "$root/releases" ]] || { echo 'unsafe deployment root' >&2; exit 1; }
+[[ -d "$directory" && ! -L "$directory" ]] || { echo 'unsafe staged release' >&2; exit 1; }
+[[ $(realpath -e "$directory") == "$directory" ]] || { echo 'staged release resolves unexpectedly' >&2; exit 1; }
+[[ -d "$directory/backend" && ! -L "$directory/backend" && $(realpath -e "$directory/backend") == "$directory/backend" ]] || { echo 'unsafe staged backend' >&2; exit 1; }
+if find "$directory" -path '*/node_modules' -prune -o -type l -print -quit | grep -q .; then echo 'staged release contains a symbolic link' >&2; exit 1; fi
+[[ -f "$directory/backend/validate-release.js" && ! -L "$directory/backend/validate-release.js" ]] || { echo 'release validator is missing or unsafe' >&2; exit 1; }
+[[ -f "$environment_file" && ! -L "$environment_file" ]] || { echo 'production environment file is missing or unsafe' >&2; exit 1; }
+
+cd "$directory/backend"
+exec /usr/sbin/runuser --user pepepaint -- \
+	/usr/bin/env -i PATH=/usr/bin:/bin \
+	/usr/bin/node --env-file="$environment_file" validate-release.js

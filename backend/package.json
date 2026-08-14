@@ -9,6 +9,7 @@
 	},
 	"scripts": {
 		"start": "node --env-file-if-exists=.env server.js",
+		"validate:release": "node --env-file-if-exists=.env validate-release.js",
 		"test": "node --test"
 	},
 	"dependencies": {

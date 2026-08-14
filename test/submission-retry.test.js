@@ -107,6 +107,7 @@ test("lost response survives restart and retries identical fields, UUID, and art
 		crypto_impl: cryptoSequence(UUID, UUID_TWO),
 		fetch_impl: async (_url, options) => {
 			assert.equal((await store.get(UUID)).state, SUBMISSION_STATES.SENDING);
+			assert.equal(options.headers["X-Submission-ID"], UUID);
 			requests.push(options.body);
 			throw new TypeError("connection lost after acceptance");
 		},
@@ -120,6 +121,7 @@ test("lost response survives restart and retries identical fields, UUID, and art
 		store,
 		crypto_impl: cryptoSequence(UUID_TWO),
 		fetch_impl: async (_url, options) => {
+			assert.equal(options.headers["X-Submission-ID"], UUID);
 			requests.push(options.body);
 			return jsonResponse(200, { submission_id: UUID, status: "submitted" });
 		},
