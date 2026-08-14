@@ -48,7 +48,6 @@ let latest_submission_traits = null;
 const submission_retry_client = new SubmissionRetryClient({ store: new IndexedDbSubmissionStore() });
 let current_submission_attempt = null;
 let submission_ui_busy = false;
-let submission_recovery_timer_id = null;
 
 // GALLERY BUTTON
 gallery_button?.addEventListener("click", () => {
@@ -137,13 +136,6 @@ function submissionStatusText(record) {
 
 function renderSubmissionRecoveryUi(record = current_submission_attempt) {
 	current_submission_attempt = record;
-	if (submission_recovery_timer_id !== null) {
-		clearTimeout(submission_recovery_timer_id);
-		submission_recovery_timer_id = null;
-	}
-	if (record?.state === SUBMISSION_STATES.SENDING && record.send_lease?.expires_at > Date.now()) {
-		submission_recovery_timer_id = setTimeout(() => void refreshSubmissionRecoveryUi(), record.send_lease.expires_at - Date.now() + 50);
-	}
 	const retryable = record && [SUBMISSION_STATES.READY, SUBMISSION_STATES.UNCERTAIN].includes(record.state);
 	const terminal = record && [SUBMISSION_STATES.ARCHIVED_QUEUED, SUBMISSION_STATES.DELIVERED, SUBMISSION_STATES.REJECTED].includes(record.state);
 	if (submission_status) submission_status.textContent = submissionStatusText(record);

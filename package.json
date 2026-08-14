@@ -3,7 +3,6 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"test": "node --test test/*.test.js",
-		"test:deployment": "bash deployment/test/release-scripts.test.sh"
+		"test": "node --test test/*.test.js"
 	}
 }

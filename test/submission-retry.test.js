@@ -52,16 +52,6 @@ class MemoryStore {
 	async delete(uuid) {
 		this.records.delete(uuid);
 	}
-	async acquireLease(uuid, owner, now, lease_ms) {
-		const record = this.records.get(uuid);
-		if (!record || (record.send_lease?.expires_at > now && record.send_lease.owner !== owner)) return false;
-		this.records.set(uuid, { ...record, send_lease: { owner, expires_at: now + lease_ms } });
-		return true;
-	}
-	async releaseLease(uuid, owner) {
-		const record = this.records.get(uuid);
-		if (record?.send_lease?.owner === owner) this.records.set(uuid, { ...record, send_lease: null });
-	}
 }
 
 function cryptoSequence(...uuids) {
@@ -171,12 +161,6 @@ test("malformed replies, 5xx responses, and recovered sending state remain uncer
 	store.records.set(UUID, { uuid: UUID, state: SUBMISSION_STATES.SENDING, updated_at: 1, artwork_blob: new Blob(["x"]) });
 	const restarted = new SubmissionRetryClient({ store, crypto_impl: cryptoSequence(UUID_TWO), now: () => 10 });
 	assert.equal((await restarted.getCurrent()).state, SUBMISSION_STATES.UNCERTAIN);
-	store.records.set(UUID, {
-		...(await store.get(UUID)),
-		state: SUBMISSION_STATES.SENDING,
-		send_lease: { owner: "another-tab", expires_at: 100 },
-	});
-	assert.equal((await restarted.getCurrent()).state, SUBMISSION_STATES.SENDING);
 });
 
 test("server-confirmed archival with uncertain provider delivery is terminal for browser retry", async () => {
@@ -240,7 +224,7 @@ test("validation and UUID conflicts are definitive rejections while dismissal en
 	assert.equal((await client.begin(FIELDS, TRAITS)).uuid, UUID_TWO);
 });
 
-test("duplicate sends are blocked locally and a shared lease coordinates separate clients", async () => {
+test("duplicate clicks are blocked within the active page", async () => {
 	const store = new MemoryStore();
 	let release_fetch;
 	let fetch_calls = 0;
@@ -251,28 +235,12 @@ test("duplicate sends are blocked locally and a shared lease coordinates separat
 		});
 		return jsonResponse(200, { submission_id: UUID, status: "submitted" });
 	};
-	const held_locks = new Set();
-	const requested_locks = [];
-	const locks = {
-		async request(name, _options, callback) {
-			requested_locks.push(name);
-			if (held_locks.has(name)) return callback(null);
-			held_locks.add(name);
-			try {
-				return await callback({ name });
-			} finally {
-				held_locks.delete(name);
-			}
-		},
-	};
-	const first = new SubmissionRetryClient({ store, crypto_impl: cryptoSequence(UUID, "lease-owner-one"), fetch_impl, locks });
-	const second = new SubmissionRetryClient({ store, crypto_impl: cryptoSequence("lease-owner-two"), fetch_impl, locks });
-	await readyAttempt(first);
-	const active = first.send(UUID);
+	const client = new SubmissionRetryClient({ store, crypto_impl: cryptoSequence(UUID), fetch_impl });
+	await readyAttempt(client);
+	const active = client.send(UUID);
 	await new Promise((resolve) => setTimeout(resolve, 0));
-	assert.equal((await second.send(UUID)).busy, true);
+	assert.equal((await client.send(UUID)).busy, true);
 	assert.equal(fetch_calls, 1);
-	assert.deepEqual(requested_locks, [`pepepaint-submission-${UUID}`, `pepepaint-submission-${UUID}`]);
 	release_fetch();
 	await active;
 });

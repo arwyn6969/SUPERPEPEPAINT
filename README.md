@@ -60,14 +60,14 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for more detail and [AGENTS.md](AGENTS.md
 
 Production is hosted at <https://pepepaint.journeypaint.fun> on the same VPS as JourneyPaint, but uses an isolated deployment user, web directory, Nginx site, and TLS certificate.
 
-Every push to `main` triggers the [Deploy PEPEPAINT workflow](.github/workflows/deploy.yml). After the one-time versioned-release migration, the workflow:
+Every push to `main` triggers the [Deploy PEPEPAINT workflow](.github/workflows/deploy.yml). The workflow:
 
 1. Checks out the committed `main` branch.
-2. Completes all frontend, backend, deployment-script, and dependency-audit checks before configuring SSH.
-3. Builds and checksums one allowlisted frontend/backend release identified by the full Git SHA and GitHub run metadata.
-4. Uploads and validates it in a new same-filesystem staging directory without changing the live release.
-5. Atomically switches `current`, restarts the backend, and verifies private and public health/readiness plus the exact public release manifest.
-6. Automatically restores, restarts, and verifies the previous release if any post-activation check fails.
+2. Completes frontend/backend tests and the production dependency audit before configuring SSH.
+3. Copies the currently deployed frontend/backend to a private temporary directory on the GitHub runner.
+4. Synchronises the complete allowlisted frontend and backend runtime files to their existing production directories.
+5. Installs locked production dependencies, restarts the backend, and verifies the public site and health endpoint.
+6. Restores the runner-side copy and restarts the service if deployment or verification fails. The failed workflow remains visible.
 
 The workflow deploys these frontend files:
 
@@ -94,18 +94,13 @@ The workflow can also be started from GitHub:
 2. Select **Deploy PEPEPAINT**.
 3. Choose **Run workflow** on the `main` branch.
 
-### Versioned releases and rollback
+### Rollback
 
-Frontend and backend are deployed as one immutable compatibility unit under
-`/var/www/pepepaint/releases`; configuration and the archive/outbox remain
-external. Manual rollback selects an existing exact release ID through the
-protected workflow and uses the same lock, compatibility guard, atomic pointer
-operation, restart, and readiness checks as automatic rollback.
-
-The complete filesystem layout, release ID format, transaction, retention,
-failure recovery, minimal administrator changes, and one-time migration are in
-[deployment/README.md](deployment/README.md). The migration is deliberately not
-run by the normal workflow.
+The workflow keeps a temporary runner-side copy of the application files and
+restores it automatically if deployment or health verification fails. It does
+not copy, replace, or roll back the production environment file, submission
+archive, delivery outbox, or backups. For a later manual rollback, revert the
+bad Git commit and push the revert; the normal tested workflow deploys it.
 
 ### Deployment security
 
@@ -124,14 +119,14 @@ it adds the exact encoded artwork Blob, its SHA-256 digest, normalized form
 fields, accepted traits, filename/type/size, timestamps, and attempt metadata,
 then moves the record to `ready`. Requests move through `sending` and then to
 `uncertain`, `archived_queued`, `delivered`, or `rejected`. Reloading a
-`sending` record after its send lease expires makes it `uncertain` (`draft` is
+`sending` record found after a reload becomes `uncertain` (`draft` is
 represented by no submission record); retries
 always reconstruct the multipart body from the frozen record and reuse its
 UUID. There is no automatic retry loop. A user must explicitly dismiss a
 terminal record or abandon a pending record before a new UUID can be created.
 Abandoning an uncertain record warns that the server may already have accepted
-it. Web Locks and an expiring IndexedDB lease coordinate tabs, with server
-idempotency as the final safeguard.
+it. The page blocks duplicate clicks, while the backend's per-UUID serialization
+and provider idempotency remain the final duplicate-delivery safeguards.
 
 The backend validates the request, writes the artwork, `submission.json`, and
 `delivery.json` into a private staging directory, syncs them, and atomically
@@ -246,8 +241,10 @@ READINESS_PROBE_TIMEOUT_MS=5000
 READINESS_RETRY_AFTER_SECONDS=10
 ```
 
-Production startup validation is strict. `SUBMISSION_STORAGE_ROOT`, explicit
-provider enablement, and at least one complete provider are required. Email
+Production startup validation requires `SUBMISSION_STORAGE_ROOT` and at least
+one complete provider. Existing installations may infer provider enablement
+from a complete credential set; explicit `RESEND_ENABLED` and
+`TELEGRAM_ENABLED` values remain recommended. Email
 requires a structurally valid API key, sender, and destination; Telegram
 requires both a structurally valid bot token and numeric chat ID. Invalid
 booleans, integers, bounds, retry relationships, undersized leases, placeholder
@@ -338,7 +335,7 @@ Never reset a target already marked `delivered`. Do not edit or delete the artwo
 `submission.json`, and keep the original UUID so Resend retains its stable
 idempotency key.
 
-The workflow deploys the backend runtime and restarts its service, but does not deploy secrets, server configuration, tests, or archived submissions. Do not place the backend archive beneath the public Nginx document root. Versioned deployment requires the example `/api/ready` Nginx location and the one-time migration in [deployment/README.md](deployment/README.md) to be completed and verified first.
+The workflow deploys the backend runtime and restarts its service, but does not deploy secrets, server configuration, tests, or archived submissions. Do not place the backend archive beneath the public Nginx document root. `/api/ready` is useful for private diagnostics but is not required by the deployment workflow.
 
 ## License and bundled assets
 

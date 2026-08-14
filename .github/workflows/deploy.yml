@@ -5,19 +5,6 @@ on:
     branches:
       - main
   workflow_dispatch:
-    inputs:
-      operation:
-        description: Deploy the selected main commit or roll back to an existing release
-        required: true
-        type: choice
-        default: deploy
-        options:
-          - deploy
-          - rollback
-      rollback_release_id:
-        description: Exact validated release ID (rollback only)
-        required: false
-        type: string
 
 permissions:
   contents: read
@@ -28,8 +15,7 @@ concurrency:
 
 jobs:
   deploy:
-    name: Deploy or roll back application
-    if: github.ref == 'refs/heads/main'
+    name: Test and deploy application
     runs-on: ubuntu-latest
     environment:
       name: production
@@ -56,55 +42,14 @@ jobs:
       - name: Run frontend tests
         run: npm test
 
-      - name: Validate deployment programs
-        run: |
-          node --check deployment/build-release.mjs
-          bash -n deployment/remote-release.sh
-          bash -n deployment/migrate-to-versioned-releases.sh
-          bash -n deployment/pepepaint-validate-release
-          bash deployment/test/release-scripts.test.sh
-          node deployment/test/workflow-safety.test.mjs
-
-      - name: Install backend dependencies
+      - name: Install and test backend
         working-directory: backend
-        run: npm ci
-
-      - name: Run backend tests
-        working-directory: backend
-        run: npm test
-
-      - name: Audit production dependencies
-        working-directory: backend
-        run: npm audit --omit=dev
-
-      - name: Derive and validate immutable release metadata
-        if: github.event_name == 'push' || inputs.operation == 'deploy'
-        id: release
-        env:
-          COMMIT_SHA: ${{ github.sha }}
-          RUN_ID: ${{ github.run_id }}
-          RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
-          set -eu
-          release_id="${COMMIT_SHA}-${RUN_ID}-${RUN_ATTEMPT}"
-          case "$release_id" in
-            *[!0-9a-f-]*|'') exit 1 ;;
-          esac
-          printf 'release_id=%s\n' "$release_id" >> "$GITHUB_OUTPUT"
-          printf 'built_at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          npm ci
+          npm test
+          npm audit --omit=dev
 
-      - name: Build immutable release payload
-        if: github.event_name == 'push' || inputs.operation == 'deploy'
-        env:
-          RELEASE_ID: ${{ steps.release.outputs.release_id }}
-          BUILT_AT: ${{ steps.release.outputs.built_at }}
-        run: |
-          node deployment/build-release.mjs \
-            "$GITHUB_WORKSPACE" "$RUNNER_TEMP/pepepaint-release" \
-            "$RELEASE_ID" "$GITHUB_SHA" "$BUILT_AT"
-
-      # Production credentials are configured only after every repository test,
-      # audit, script test, and payload construction step has succeeded.
+      # Production credentials are configured only after every check succeeds.
       - name: Configure deployment SSH key
         env:
           DEPLOY_KEY: ${{ secrets.PEPEPAINT_DEPLOY_KEY }}
@@ -117,42 +62,90 @@ jobs:
             > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
-      - name: Upload, publish, activate, and verify release
-        if: github.event_name == 'push' || inputs.operation == 'deploy'
-        env:
-          RELEASE_ID: ${{ steps.release.outputs.release_id }}
+      - name: Back up current application on the runner
+        id: backup
         run: |
           set -eu
-          remote() {
-            ssh -i ~/.ssh/pepepaint_deploy -o IdentitiesOnly=yes "$@"
-          }
-          expected_current=$(remote pepepaint-deploy@87.106.69.245 \
-            'bash -s -- current-id /var/www/pepepaint' < deployment/remote-release.sh)
-          staging_path=$(remote pepepaint-deploy@87.106.69.245 \
-            "bash -s -- init /var/www/pepepaint '$RELEASE_ID'" < deployment/remote-release.sh)
-          case "$staging_path" in
-            /var/www/pepepaint/releases/.staging-"$RELEASE_ID") ;;
-            *) echo 'Remote staging path was not the exact expected path.' >&2; exit 1 ;;
-          esac
+          mkdir -p "$RUNNER_TEMP/pepepaint-rollback/frontend" "$RUNNER_TEMP/pepepaint-rollback/backend"
           rsync -az --delete \
             -e 'ssh -i ~/.ssh/pepepaint_deploy -o IdentitiesOnly=yes' \
-            "$RUNNER_TEMP/pepepaint-release/" \
-            "pepepaint-deploy@87.106.69.245:$staging_path/"
-          remote pepepaint-deploy@87.106.69.245 \
-            "bash -s -- deploy /var/www/pepepaint '$RELEASE_ID' '$expected_current'" \
-            < deployment/remote-release.sh
+            pepepaint-deploy@87.106.69.245:/var/www/pepepaint/current/ \
+            "$RUNNER_TEMP/pepepaint-rollback/frontend/"
+          rsync -az --delete \
+            --exclude='/node_modules/***' \
+            --exclude='/.env' \
+            --exclude='/var/***' \
+            -e 'ssh -i ~/.ssh/pepepaint_deploy -o IdentitiesOnly=yes' \
+            pepepaint-deploy@87.106.69.245:/var/www/pepepaint/backend/ \
+            "$RUNNER_TEMP/pepepaint-rollback/backend/"
 
-      - name: Roll back to an existing validated release
-        if: github.event_name == 'workflow_dispatch' && inputs.operation == 'rollback'
-        env:
-          TARGET_RELEASE_ID: ${{ inputs.rollback_release_id }}
+      - name: Deploy frontend files
+        run: |
+          rsync -az --delete \
+            --include='/index.html' \
+            --include='/main.js' \
+            --include='/submission-retry.js' \
+            --include='/traits.js' \
+            --include='/filters.js' \
+            --include='/styles.css' \
+            --include='/favicon/***' \
+            --include='/brushes/***' \
+            --include='/fonts/***' \
+            --exclude='*' \
+            -e 'ssh -i ~/.ssh/pepepaint_deploy -o IdentitiesOnly=yes' \
+            ./ pepepaint-deploy@87.106.69.245:/var/www/pepepaint/current/
+
+      - name: Deploy backend files
+        run: |
+          rsync -az --delete \
+            --exclude='/node_modules/***' \
+            --exclude='/.env' \
+            --exclude='/var/***' \
+            --exclude='/test/***' \
+            --exclude='/scripts/***' \
+            --exclude='/deploy/***' \
+            -e 'ssh -i ~/.ssh/pepepaint_deploy -o IdentitiesOnly=yes' \
+            ./backend/ pepepaint-deploy@87.106.69.245:/var/www/pepepaint/backend/
+
+      - name: Install dependencies and restart API
+        run: |
+          ssh -i ~/.ssh/pepepaint_deploy -o IdentitiesOnly=yes \
+            pepepaint-deploy@87.106.69.245 '
+              set -eu
+              cd /var/www/pepepaint/backend
+              /usr/bin/npm ci --omit=dev
+              sudo -n /usr/bin/systemctl restart pepepaint-submissions.service
+              sudo -n /usr/bin/systemctl is-active --quiet pepepaint-submissions.service
+            '
+
+      - name: Verify live deployment
+        run: |
+          curl --fail --silent --show-error --retry 10 --retry-delay 2 https://pepepaint.journeypaint.fun/ > /dev/null
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 https://pepepaint.journeypaint.fun/submission-retry.js > /dev/null
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 https://pepepaint.journeypaint.fun/traits.js > /dev/null
+          curl --fail --silent --show-error --retry 10 --retry-delay 2 https://pepepaint.journeypaint.fun/api/health > /dev/null
+
+      - name: Restore previous application if deployment failed
+        if: ${{ failure() && steps.backup.outcome == 'success' }}
         run: |
           set -eu
-          if [[ ! "$TARGET_RELEASE_ID" =~ ^[0-9a-f]{40}-[1-9][0-9]{0,19}-[1-9][0-9]{0,5}$ ]]; then
-            echo 'Rollback release ID is malformed.' >&2
-            exit 1
-          fi
+          rsync -az --delete \
+            -e 'ssh -i ~/.ssh/pepepaint_deploy -o IdentitiesOnly=yes' \
+            "$RUNNER_TEMP/pepepaint-rollback/frontend/" \
+            pepepaint-deploy@87.106.69.245:/var/www/pepepaint/current/
+          rsync -az --delete \
+            --exclude='/node_modules/***' \
+            --exclude='/.env' \
+            --exclude='/var/***' \
+            -e 'ssh -i ~/.ssh/pepepaint_deploy -o IdentitiesOnly=yes' \
+            "$RUNNER_TEMP/pepepaint-rollback/backend/" \
+            pepepaint-deploy@87.106.69.245:/var/www/pepepaint/backend/
           ssh -i ~/.ssh/pepepaint_deploy -o IdentitiesOnly=yes \
-            pepepaint-deploy@87.106.69.245 \
-            "bash -s -- rollback /var/www/pepepaint '$TARGET_RELEASE_ID'" \
-            < deployment/remote-release.sh
+            pepepaint-deploy@87.106.69.245 '
+              set -eu
+              cd /var/www/pepepaint/backend
+              /usr/bin/npm ci --omit=dev
+              sudo -n /usr/bin/systemctl restart pepepaint-submissions.service
+              sudo -n /usr/bin/systemctl is-active --quiet pepepaint-submissions.service
+            '
+          curl --fail --silent --show-error --retry 10 --retry-delay 2 https://pepepaint.journeypaint.fun/api/health > /dev/null

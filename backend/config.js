@@ -51,9 +51,10 @@ function mailbox(key, value) {
 	return normalized;
 }
 
-function providerEnabled({ key, option, environment, inferred, production }) {
+function providerEnabled({ key, option, environment, inferred }) {
 	const raw = option ?? environment[key];
-	if (production && missing(raw)) throw new ConfigurationError(key, "must be explicitly set in production.");
+	// Existing PEPEPAINT installations predate explicit provider flags. A full
+	// credential set therefore enables that provider unless an operator opts out.
 	return boolean(key, raw, inferred);
 }
 
@@ -84,14 +85,12 @@ export function loadConfiguration(options = {}, environment = process.env) {
 		option: options.email_enabled,
 		environment,
 		inferred: Boolean(api_key || raw_from || raw_to || options.deliver_email),
-		production,
 	});
 	const telegram_enabled = providerEnabled({
 		key: "TELEGRAM_ENABLED",
 		option: options.telegram_enabled,
 		environment,
 		inferred: Boolean(telegram_bot_token || telegram_chat_id || options.deliver_telegram),
-		production,
 	});
 	if (production && !email_enabled && !telegram_enabled) {
 		throw new ConfigurationError("RESEND_ENABLED/TELEGRAM_ENABLED", "must enable at least one delivery provider in production.");

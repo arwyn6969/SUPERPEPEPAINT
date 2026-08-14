@@ -122,42 +122,6 @@ export class IndexedDbSubmissionStore {
 		transaction.objectStore(SUBMISSION_STORE_NAME).delete(uuid);
 		await transactionPromise(transaction, "Could not dismiss the saved submission.");
 	}
-
-	async acquireLease(uuid, owner, now, lease_ms) {
-		const database = await this.open_database();
-		return new Promise((resolve, reject) => {
-			const transaction = database.transaction(SUBMISSION_STORE_NAME, "readwrite");
-			const store = transaction.objectStore(SUBMISSION_STORE_NAME);
-			const request = store.get(uuid);
-			let acquired = false;
-			request.onsuccess = () => {
-				const record = request.result;
-				if (!record) return;
-				if (record.send_lease?.expires_at > now && record.send_lease.owner !== owner) return;
-				store.put({ ...record, send_lease: { owner, expires_at: now + lease_ms } });
-				acquired = true;
-			};
-			transaction.oncomplete = () => resolve(acquired);
-			transaction.onerror = () => reject(transaction.error || new Error("Could not coordinate the submission retry."));
-			transaction.onabort = () => reject(transaction.error || new Error("Submission retry coordination was aborted."));
-		});
-	}
-
-	async releaseLease(uuid, owner) {
-		const database = await this.open_database();
-		return new Promise((resolve, reject) => {
-			const transaction = database.transaction(SUBMISSION_STORE_NAME, "readwrite");
-			const store = transaction.objectStore(SUBMISSION_STORE_NAME);
-			const request = store.get(uuid);
-			request.onsuccess = () => {
-				const record = request.result;
-				if (record?.send_lease?.owner === owner) store.put({ ...record, send_lease: null });
-			};
-			transaction.oncomplete = () => resolve();
-			transaction.onerror = () => reject(transaction.error || new Error("Could not release submission retry coordination."));
-			transaction.onabort = () => reject(transaction.error || new Error("Submission retry coordination was aborted."));
-		});
-	}
 }
 
 function bytesToHex(buffer) {
@@ -201,30 +165,25 @@ export class SubmissionRetryClient {
 		store,
 		fetch_impl = globalThis.fetch,
 		crypto_impl = globalThis.crypto,
-		locks = globalThis.navigator?.locks,
 		now = () => Date.now(),
 		timeout_ms = 60_000,
-		lease_ms = 90_000,
 	} = {}) {
 		this.store = store;
 		this.fetch_impl = fetch_impl;
 		this.crypto_impl = crypto_impl;
-		this.locks = locks;
 		this.now = now;
 		this.timeout_ms = timeout_ms;
-		this.lease_ms = lease_ms;
 		this.in_flight = new Set();
 	}
 
 	async getCurrent() {
 		const record = await this.store.getCurrent();
-		if (record?.state === SUBMISSION_STATES.SENDING && !(record.send_lease?.expires_at > this.now())) {
+		if (record?.state === SUBMISSION_STATES.SENDING) {
 			const recovered = {
 				...record,
 				state: SUBMISSION_STATES.UNCERTAIN,
 				updated_at: this.now(),
 				last_client_error: "The page closed before the submission result was known. Safe retry is available.",
-				send_lease: null,
 			};
 			await this.store.put(recovered);
 			return recovered;
@@ -249,7 +208,6 @@ export class SubmissionRetryClient {
 			server_state: null,
 			server_delivery_state: null,
 			server_message: null,
-			send_lease: null,
 		};
 		const created = this.store.putIfEmpty
 			? await this.store.putIfEmpty(record)
@@ -280,27 +238,17 @@ export class SubmissionRetryClient {
 		if (this.in_flight.has(uuid)) return { busy: true, record: await this.store.get(uuid) };
 		this.in_flight.add(uuid);
 		try {
-			if (this.locks?.request) {
-				return await this.locks.request(`pepepaint-submission-${uuid}`, { ifAvailable: true }, async (lock) => {
-					if (!lock) return { busy: true, record: await this.store.get(uuid) };
-					return this.sendWithLease(uuid);
-				});
-			}
-			return await this.sendWithLease(uuid);
+			return await this.sendAttempt(uuid);
 		} finally {
 			this.in_flight.delete(uuid);
 		}
 	}
 
-	async sendWithLease(uuid) {
-		const owner = this.crypto_impl.randomUUID();
-		const acquired = await this.store.acquireLease(uuid, owner, this.now(), this.lease_ms);
-		if (!acquired) return { busy: true, record: await this.store.get(uuid) };
-		try {
-			let record = await this.store.get(uuid);
-			if (!record || !RETRYABLE_STATES.has(record.state) || !(record.artwork_blob instanceof Blob)) {
-				return { busy: false, record };
-			}
+	async sendAttempt(uuid) {
+		let record = await this.store.get(uuid);
+		if (!record || !RETRYABLE_STATES.has(record.state) || !(record.artwork_blob instanceof Blob)) {
+			return { busy: false, record };
+		}
 			const attempt_time = this.now();
 			record = {
 				...record,
@@ -365,9 +313,6 @@ export class SubmissionRetryClient {
 			} finally {
 				clearTimeout(timeout);
 			}
-		} finally {
-			await this.store.releaseLease(uuid, owner).catch(() => {});
-		}
 	}
 
 	async dismiss(uuid) {

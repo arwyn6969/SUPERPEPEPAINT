@@ -26,9 +26,9 @@ test("loads, normalizes, and freezes a valid production configuration", () => {
 	assert.ok(Object.isFrozen(configuration));
 });
 
-test("production requires an archive root and explicit complete provider configuration", () => {
+test("production requires an archive root and complete enabled provider configuration", () => {
 	assert.throws(() => loadConfiguration({}, productionEnvironment({ SUBMISSION_STORAGE_ROOT: "" })), /SUBMISSION_STORAGE_ROOT/);
-	assert.throws(() => loadConfiguration({}, productionEnvironment({ RESEND_ENABLED: "", TELEGRAM_ENABLED: "false" })), /RESEND_ENABLED/);
+	assert.equal(loadConfiguration({}, productionEnvironment({ RESEND_ENABLED: "", TELEGRAM_ENABLED: "false" })).email_enabled, true);
 	assert.throws(() => loadConfiguration({}, productionEnvironment({ RESEND_API_KEY: "" })), /RESEND_API_KEY/);
 	assert.throws(() => loadConfiguration({}, productionEnvironment({ SUBMISSION_TO_EMAIL: "not-an-address" })), /SUBMISSION_TO_EMAIL/);
 	assert.throws(() => loadConfiguration({}, productionEnvironment({ RESEND_ENABLED: "false", TELEGRAM_ENABLED: "true", TELEGRAM_BOT_TOKEN: "123456:valid_bot_token_1234567890", TELEGRAM_CHAT_ID: "" })), /TELEGRAM_BOT_TOKEN\/TELEGRAM_CHAT_ID/);
