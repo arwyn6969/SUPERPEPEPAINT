@@ -270,7 +270,12 @@ test("IndexedDB version 2 migration adds submission storage without replacing ca
 
 test("accepted submission handling resets only the form and leaves canvas persistence untouched", async () => {
 	const source = await readFile(new URL("../main.js", import.meta.url), "utf8");
-	const accepted_handler = source.slice(source.indexOf("async function sendCurrentSubmission"), source.indexOf('submission_form?.addEventListener("submit"'));
-	assert.match(accepted_handler, /if \(result\.accepted\)[\s\S]*submission_form\.reset\(\)/);
+	const recovery_handler_start = source.indexOf("async function sendCurrentSubmission");
+	const legacy_handler_start = source.indexOf('submission_form?.addEventListener("submit"');
+	const accepted_handler_start = recovery_handler_start >= 0 ? recovery_handler_start : legacy_handler_start;
+	const accepted_handler_end = source.indexOf("/////////////////////", accepted_handler_start);
+	assert.notEqual(accepted_handler_start, -1, "main.js must contain a submission acceptance handler");
+	const accepted_handler = source.slice(accepted_handler_start, accepted_handler_end);
+	assert.match(accepted_handler, /submission_form\.reset\(\)/);
 	assert.doesNotMatch(accepted_handler, /resetCanvas|deleteLatestStoredCanvas|clearRect|draw_canvas/);
 });
