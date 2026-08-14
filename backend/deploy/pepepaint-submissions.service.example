@@ -9,15 +9,14 @@ User=pepepaint
 Group=pepepaint
 WorkingDirectory=/var/www/pepepaint/backend
 EnvironmentFile=/etc/pepepaint/submissions.env
-ExecStart=/usr/bin/node /var/www/pepepaint/backend/server.js
-Restart=on-abnormal
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/var/lib/pepepaint/submissions
-TimeoutStopSec=150
 
 [Install]
 WantedBy=multi-user.target

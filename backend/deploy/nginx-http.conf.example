@@ -1,5 +1,0 @@
-# Add these directives to the Nginx http context (not the site server block)
-# before using nginx-location.conf.example. The shared-memory zones enforce a
-# VPS-wide boundary even when the Node process restarts.
-limit_req_zone $binary_remote_addr zone=pepepaint_submissions:10m rate=10r/m;
-limit_conn_zone $binary_remote_addr zone=pepepaint_submission_connections:10m;
