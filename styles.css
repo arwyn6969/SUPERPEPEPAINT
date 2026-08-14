@@ -109,7 +109,6 @@ body::-webkit-scrollbar {
 #header_title {
 	font-family: "unscii8", monospace;
 	font-size: 1.3em;
-	padding: 4px 0 0 4px;
 }
 
 .header_item {
@@ -176,7 +175,7 @@ a:active {
 	height: 560px;
 	background: #ffffff url("brushes/template01.png") center / cover no-repeat;
 	color: green;
-	padding: 29px 34px;
+	padding: 30px 34px;
 	overflow: hidden;
 	overscroll-behavior: none;
 	z-index: 99999999999999;
@@ -203,7 +202,6 @@ a:active {
 #submission_title {
 	font-family: "unscii8", monospace;
 	font-size: 1.1em;
-	padding: 3px 0 0 3px;
 }
 
 .submission_close_button {
@@ -230,10 +228,6 @@ a:active {
 	flex-flow: column nowrap;
 	justify-content: center;
 	align-items: center;
-}
-
-#submission_description_input {
-	border: 2px inset grey;
 }
 
 #submission_address_label {
@@ -277,10 +271,9 @@ a:active {
 
 .submission_actions {
 	display: flex;
-	flex-flow: row wrap;
+	flex-flow: row nowrap;
 	justify-content: space-around;
 	align-items: center;
-	gap: 6px;
 	user-select: none;
 	width: 400px;
 	position: absolute;
@@ -455,7 +448,7 @@ a:active {
 	user-select: none;
 	width: 400px;
 	position: fixed;
-	top: 86px; /* 510px */
+	top: 80px; /* 510px */
 	left: 0px;
 	/* height: 44px; */
 	z-index: 99999999999999;
@@ -537,7 +530,7 @@ a:active {
 	flex-flow: column wrap;
 	justify-content: flex-start;
 	align-items: flex-start;
-	padding: 0 50px;
+	padding: 0 36px;
 }
 
 .controls {
