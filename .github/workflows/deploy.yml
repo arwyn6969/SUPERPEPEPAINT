@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   deploy:
-    name: Controlled full-stack rollback
+    name: Deploy application
     runs-on: ubuntu-latest
     environment:
       name: production
@@ -58,33 +58,9 @@ jobs:
             > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
-      - name: Verify current production health
-        run: |
-          curl --fail --silent --show-error --retry 5 --retry-delay 2 \
-            https://pepepaint.journeypaint.fun/api/health > /dev/null
-
-      - name: Back up current active application on the runner
-        id: backup
-        run: |
-          set -eu
-          mkdir -p "$RUNNER_TEMP/pepepaint-rollback/frontend" "$RUNNER_TEMP/pepepaint-rollback/backend"
-          rsync -az --delete \
-            -e 'ssh -i ~/.ssh/pepepaint_deploy -o IdentitiesOnly=yes' \
-            pepepaint-deploy@87.106.69.245:/var/www/pepepaint/current/ \
-            "$RUNNER_TEMP/pepepaint-rollback/frontend/"
-          rsync -az --delete \
-            --exclude='/node_modules/***' \
-            --exclude='/.env' \
-            --exclude='/var/***' \
-            -e 'ssh -i ~/.ssh/pepepaint_deploy -o IdentitiesOnly=yes' \
-            pepepaint-deploy@87.106.69.245:/var/www/pepepaint/backend/ \
-            "$RUNNER_TEMP/pepepaint-rollback/backend/"
-
       - name: Deploy frontend files
         run: |
-          # --delete-excluded is intentional for this one-time rollback: the
-          # public web root must contain only the target commit's allowlist.
-          rsync -az --delete --delete-excluded \
+          rsync -az --delete \
             --include='/index.html' \
             --include='/main.js' \
             --include='/traits.js' \
@@ -120,47 +96,9 @@ jobs:
               sudo -n /usr/bin/systemctl is-active --quiet pepepaint-submissions.service
             '
 
-      - name: Verify audit-only active files were removed
-        run: |
-          ssh -i ~/.ssh/pepepaint_deploy -o IdentitiesOnly=yes \
-            pepepaint-deploy@87.106.69.245 '
-              set -eu
-              test ! -e /var/www/pepepaint/current/submission-retry.js
-              test ! -e /var/www/pepepaint/backend/config.js
-              test ! -e /var/www/pepepaint/backend/delivery-outbox.js
-              test ! -e /var/www/pepepaint/backend/provider-delivery.js
-              test ! -e /var/www/pepepaint/backend/readiness.js
-            '
-
       - name: Verify live deployment
         run: |
           curl --fail --silent --show-error --retry 5 --retry-delay 2 https://pepepaint.journeypaint.fun/ > /dev/null
           curl --fail --silent --show-error --retry 5 --retry-delay 2 https://pepepaint.journeypaint.fun/favicon/IMG_2807.JPG > /dev/null
           curl --fail --silent --show-error --retry 5 --retry-delay 2 https://pepepaint.journeypaint.fun/traits.js > /dev/null
           curl --fail --silent --show-error --retry 5 --retry-delay 2 https://pepepaint.journeypaint.fun/api/health > /dev/null
-
-      - name: Restore audited application if rollback deployment failed
-        if: ${{ failure() && steps.backup.outcome == 'success' }}
-        run: |
-          set -eu
-          rsync -az --delete \
-            -e 'ssh -i ~/.ssh/pepepaint_deploy -o IdentitiesOnly=yes' \
-            "$RUNNER_TEMP/pepepaint-rollback/frontend/" \
-            pepepaint-deploy@87.106.69.245:/var/www/pepepaint/current/
-          rsync -az --delete \
-            --exclude='/node_modules/***' \
-            --exclude='/.env' \
-            --exclude='/var/***' \
-            -e 'ssh -i ~/.ssh/pepepaint_deploy -o IdentitiesOnly=yes' \
-            "$RUNNER_TEMP/pepepaint-rollback/backend/" \
-            pepepaint-deploy@87.106.69.245:/var/www/pepepaint/backend/
-          ssh -i ~/.ssh/pepepaint_deploy -o IdentitiesOnly=yes \
-            pepepaint-deploy@87.106.69.245 '
-              set -eu
-              cd /var/www/pepepaint/backend
-              /usr/bin/npm ci --omit=dev
-              sudo -n /usr/bin/systemctl restart pepepaint-submissions.service
-              sudo -n /usr/bin/systemctl is-active --quiet pepepaint-submissions.service
-            '
-          curl --fail --silent --show-error --retry 5 --retry-delay 2 \
-            https://pepepaint.journeypaint.fun/api/health > /dev/null
