@@ -1,10 +1,10 @@
 import {
 	calculateChaos,
-	calculateDuration,
-	calculatePepeness,
-	createDistanceTravelledTrait,
-	createNumberOfStrokesTrait,
-	createVarietyTrait,
+	calculateCroakage,
+	calculateQuietus,
+	createBrushinessTrait,
+	createRSiTrait,
+	createWanderlustTrait,
 } from "./traits.js";
 
 // It's PEPEPAINT v1 first uploaded on 7th Oct 2025
@@ -65,27 +65,27 @@ submission_form?.addEventListener("input", () => {
 });
 
 function calculateSubmissionTraits(canvas, ended_at = Date.now()) {
-	const duration_trait = calculateDuration(artwork_started_at, ended_at);
+	const quietus_trait = calculateQuietus(quietus_started_at, ended_at);
 	return {
-		pepeness: calculatePepeness(canvas).value,
-		number_of_strokes: createNumberOfStrokesTrait(number_of_strokes).value,
-		duration: duration_trait.formatted,
-		quietus: duration_trait.quietus,
-		distance_travelled: createDistanceTravelledTrait(pointer_distance_travelled, draw_canvas.width, draw_canvas.height).value,
+		croakage: calculateCroakage(canvas).value,
+		rsi: createRSiTrait(rsi).value,
+		quietus_elapsed: quietus_trait.formatted,
+		quietus: quietus_trait.quietus,
+		wanderlust: createWanderlustTrait(wanderlust, draw_canvas.width, draw_canvas.height).value,
 		chaos: calculateChaos(canvas).value,
-		variety: createVarietyTrait(brush_usage).value,
+		brushiness: createBrushinessTrait(brushiness_usage).value,
 	};
 }
 
 function getPublicTraits() {
 	const values = calculateSubmissionTraits(createFlattenedCanvas());
 	return {
-		"Croakage (%)": values.pepeness,
-		"RSi (num)": values.number_of_strokes,
+		"Croakage (%)": values.croakage,
+		"RSi (num)": values.rsi,
 		"Quietus (%)": values.quietus,
-		"Wanderlust (px)": values.distance_travelled,
+		"Wanderlust (px)": values.wanderlust,
 		Cows: values.chaos,
-		"Brushiness (num)": values.variety,
+		"Brushiness (num)": values.brushiness,
 	};
 }
 
@@ -1664,7 +1664,7 @@ document.addEventListener("keyup", (e) => {
 		randAll();
 		const brush_name_after_randomise = image_brush_array[Number.parseInt(image_index, 10)];
 		if (isDrawing && active_pointer_id !== null && brush_name_after_randomise !== brush_name_before_randomise) {
-			recordCurrentBrushUsage();
+			recordCurrentBrushiness();
 		}
 	} else if (e.key === "q") {
 		blurr();
@@ -2285,39 +2285,39 @@ draw_canvas.style.opacity = draw_canvas_data.opacity;
 preview_ctx.lineJoin = "miter";
 preview_ctx.lineCap = "butt";
 
-let brush_usage = Object.create(null);
+let brushiness_usage = Object.create(null);
 
-function cloneBrushUsage(source = brush_usage) {
+function cloneBrushinessUsage(source = brushiness_usage) {
 	const clone = Object.create(null);
 	if (!source || typeof source !== "object" || Array.isArray(source)) {
 		return clone;
 	}
 
-	for (const [brush_name, stroke_count] of Object.entries(source)) {
-		if (brush_name.length > 0 && Number.isSafeInteger(stroke_count) && stroke_count > 0) {
-			clone[brush_name] = stroke_count;
+	for (const [brush_name, usage_count] of Object.entries(source)) {
+		if (brush_name.length > 0 && Number.isSafeInteger(usage_count) && usage_count > 0) {
+			clone[brush_name] = usage_count;
 		}
 	}
 	return clone;
 }
 
-function restoreBrushUsage(source) {
-	brush_usage = cloneBrushUsage(source);
+function restoreBrushinessUsage(source) {
+	brushiness_usage = cloneBrushinessUsage(source);
 }
 
-function recordCurrentBrushUsage() {
+function recordCurrentBrushiness() {
 	const brush_name = image_brush_array[Number.parseInt(image_index, 10)];
 	if (typeof brush_name !== "string" || brush_name.length === 0) {
 		return;
 	}
 
-	brush_usage[brush_name] = (brush_usage[brush_name] || 0) + 1;
+	brushiness_usage[brush_name] = (brushiness_usage[brush_name] || 0) + 1;
 }
 
 function createCanvasHistoryState() {
 	return {
 		canvas_data_url: draw_canvas.toDataURL(),
-		brush_usage: cloneBrushUsage(),
+		brushiness_usage: cloneBrushinessUsage(),
 	};
 }
 
@@ -2325,13 +2325,13 @@ function normalizeCanvasHistoryState(state) {
 	if (typeof state === "string") {
 		return {
 			canvas_data_url: state,
-			brush_usage: cloneBrushUsage(),
+			brushiness_usage: cloneBrushinessUsage(),
 		};
 	}
 
 	return {
 		canvas_data_url: state.canvas_data_url,
-		brush_usage: cloneBrushUsage(state.brush_usage),
+		brushiness_usage: cloneBrushinessUsage(state.brushiness_usage ?? state.brush_usage),
 	};
 }
 
@@ -2351,9 +2351,9 @@ let persistent_canvas_save_requested = false;
 let persistent_canvas_save_task = null;
 let canvas_storage_warning_shown = false;
 let canvas_is_ready = false;
-let number_of_strokes = 0;
-let artwork_started_at = null;
-let pointer_distance_travelled = 0;
+let rsi = 0;
+let quietus_started_at = null;
+let wanderlust = 0;
 
 function warnCanvasStorage(message, error) {
 	if (canvas_storage_warning_shown) {
@@ -2419,10 +2419,10 @@ async function putLatestStoredCanvas(blob, saved_traits) {
 			blob,
 			width: draw_canvas.width,
 			height: draw_canvas.height,
-			number_of_strokes: saved_traits.number_of_strokes,
-			artwork_started_at: saved_traits.artwork_started_at,
-			pointer_distance_travelled: saved_traits.pointer_distance_travelled,
-			brush_usage: cloneBrushUsage(saved_traits.brush_usage),
+			rsi: saved_traits.rsi,
+			quietus_started_at: saved_traits.quietus_started_at,
+			wanderlust: saved_traits.wanderlust,
+			brushiness_usage: cloneBrushinessUsage(saved_traits.brushiness_usage),
 			updated_at: Date.now(),
 			schema_version: 1,
 		});
@@ -2471,10 +2471,10 @@ async function flushPersistentCanvasSaves() {
 		persistent_canvas_save_requested = false;
 		const snapshot_canvas = createCanvasSnapshot();
 		const snapshot_traits = {
-			number_of_strokes,
-			artwork_started_at,
-			pointer_distance_travelled,
-			brush_usage: cloneBrushUsage(),
+			rsi,
+			quietus_started_at,
+			wanderlust,
+			brushiness_usage: cloneBrushinessUsage(),
 		};
 		const blob = await canvasToPngBlob(snapshot_canvas);
 
@@ -2548,11 +2548,13 @@ async function drawStoredCanvas(record) {
 	try {
 		draw_ctx.clearRect(0, 0, draw_canvas.width, draw_canvas.height);
 		draw_ctx.drawImage(image_source, 0, 0, draw_canvas.width, draw_canvas.height);
-		number_of_strokes = Number.isSafeInteger(record.number_of_strokes) && record.number_of_strokes >= 0 ? record.number_of_strokes : 0;
-		artwork_started_at = Number.isFinite(record.artwork_started_at) && record.artwork_started_at >= 0 ? record.artwork_started_at : null;
-		pointer_distance_travelled =
-			Number.isFinite(record.pointer_distance_travelled) && record.pointer_distance_travelled >= 0 ? record.pointer_distance_travelled : 0;
-		restoreBrushUsage(record.brush_usage);
+		const saved_rsi = record.rsi ?? record.number_of_strokes;
+		const saved_quietus_started_at = record.quietus_started_at ?? record.artwork_started_at;
+		const saved_wanderlust = record.wanderlust ?? record.pointer_distance_travelled;
+		rsi = Number.isSafeInteger(saved_rsi) && saved_rsi >= 0 ? saved_rsi : 0;
+		quietus_started_at = Number.isFinite(saved_quietus_started_at) && saved_quietus_started_at >= 0 ? saved_quietus_started_at : null;
+		wanderlust = Number.isFinite(saved_wanderlust) && saved_wanderlust >= 0 ? saved_wanderlust : 0;
+		restoreBrushinessUsage(record.brushiness_usage ?? record.brush_usage);
 	} finally {
 		image_source.close?.();
 		if (object_url) {
@@ -2597,7 +2599,7 @@ function layerUndo() {
 			draw_ctx.clearRect(0, 0, window_w, window_h);
 			draw_ctx.imageSmoothingEnabled = true;
 			draw_ctx.drawImage(img, 0, 0, window_w, window_h);
-			restoreBrushUsage(previousState.brush_usage);
+			restoreBrushinessUsage(previousState.brushiness_usage);
 			setFilters();
 			setBlendMode(draw_ctx);
 			queuePersistentCanvasSave();
@@ -2629,7 +2631,7 @@ function layerRedo() {
 			draw_ctx.clearRect(0, 0, window_w, window_h);
 			draw_ctx.imageSmoothingEnabled = true;
 			draw_ctx.drawImage(img, 0, 0, window_w, window_h);
-			restoreBrushUsage(nextState.brush_usage);
+			restoreBrushinessUsage(nextState.brushiness_usage);
 			setFilters();
 			setBlendMode(draw_ctx);
 			queuePersistentCanvasSave();
@@ -2957,16 +2959,16 @@ function mouseIsDown() {
 
 // POINTER EVENTS
 let active_pointer_id = null;
-let distance_last_pointer_position = null;
+let wanderlust_last_pointer_position = null;
 
-function addPointerDistance(position) {
-	if (!distance_last_pointer_position) {
-		distance_last_pointer_position = { x: position.x, y: position.y };
+function addWanderlust(position) {
+	if (!wanderlust_last_pointer_position) {
+		wanderlust_last_pointer_position = { x: position.x, y: position.y };
 		return;
 	}
 
-	pointer_distance_travelled += Math.hypot(position.x - distance_last_pointer_position.x, position.y - distance_last_pointer_position.y);
-	distance_last_pointer_position = { x: position.x, y: position.y };
+	wanderlust += Math.hypot(position.x - wanderlust_last_pointer_position.x, position.y - wanderlust_last_pointer_position.y);
+	wanderlust_last_pointer_position = { x: position.x, y: position.y };
 }
 
 preview_canvas.addEventListener("pointerdown", (event) => {
@@ -2991,15 +2993,15 @@ preview_canvas.addEventListener("pointerdown", (event) => {
 	active_pointer_id = event.pointerId;
 	preview_canvas.setPointerCapture(event.pointerId);
 	mousePos = getPointerPosition(preview_canvas, event);
-	distance_last_pointer_position = { x: mousePos.x, y: mousePos.y };
+	wanderlust_last_pointer_position = { x: mousePos.x, y: mousePos.y };
 	last_watercolor_deposit = null;
 
 	saveCanvasState();
-	recordCurrentBrushUsage();
-	if (artwork_started_at === null) {
-		artwork_started_at = Date.now();
+	recordCurrentBrushiness();
+	if (quietus_started_at === null) {
+		quietus_started_at = Date.now();
 	}
-	number_of_strokes += 1;
+	rsi += 1;
 
 	// setFilters(); // do this on mouseIsDown for automation
 	setBlendMode(draw_ctx);
@@ -3024,8 +3026,8 @@ preview_canvas.addEventListener("pointerup", (event) => {
 		return;
 	}
 	mousePos = getPointerPosition(preview_canvas, event);
-	addPointerDistance(mousePos);
-	distance_last_pointer_position = null;
+	addWanderlust(mousePos);
+	wanderlust_last_pointer_position = null;
 
 	isDrawing = false; // Set drawing mode to false
 	auto_inc_x_running = 0;
@@ -3050,9 +3052,9 @@ preview_canvas.addEventListener("pointerout", (event) => {
 	if (stop_drawing_on_mouse_out) {
 		const action_was_active = isDrawing;
 		if (action_was_active && event.pointerId === active_pointer_id) {
-			addPointerDistance(getPointerPosition(preview_canvas, event));
+			addWanderlust(getPointerPosition(preview_canvas, event));
 		}
-		distance_last_pointer_position = null;
+		wanderlust_last_pointer_position = null;
 		isDrawing = false;
 		auto_inc_x_running = 0;
 		auto_inc_y_running = 0;
@@ -3076,9 +3078,9 @@ preview_canvas.addEventListener("pointercancel", (event) => {
 	}
 	const action_was_active = isDrawing;
 	if (action_was_active) {
-		addPointerDistance(getPointerPosition(preview_canvas, event));
+		addWanderlust(getPointerPosition(preview_canvas, event));
 	}
-	distance_last_pointer_position = null;
+	wanderlust_last_pointer_position = null;
 	preview_ctx.clearRect(0, 0, window_w, window_h);
 	isDrawing = false;
 	auto_inc_x_running = 0;
@@ -3108,7 +3110,7 @@ preview_canvas.addEventListener("pointermove", (event) => {
 	}
 	mousePos = getPointerPosition(preview_canvas, event); // Get pointer coordinates
 	if (isDrawing && event.pointerId === active_pointer_id) {
-		addPointerDistance(mousePos);
+		addWanderlust(mousePos);
 	}
 
 	preview_ctx.clearRect(0, 0, window_w, window_h); // Clear the top canvas before redrawing (avoids smearing of previous drawings)
@@ -3343,11 +3345,11 @@ async function resetCanvas() {
 		await waitForPersistentCanvasSaves();
 		persistent_canvas_save_requested = false;
 		await deleteLatestStoredCanvas();
-		number_of_strokes = 0;
-		artwork_started_at = null;
-		pointer_distance_travelled = 0;
-		distance_last_pointer_position = null;
-		restoreBrushUsage(null);
+		rsi = 0;
+		quietus_started_at = null;
+		wanderlust = 0;
+		wanderlust_last_pointer_position = null;
+		restoreBrushinessUsage(null);
 		latest_submission_traits = null;
 
 		draw_ctx.clearRect(0, 0, draw_canvas.width, draw_canvas.height);
@@ -3371,13 +3373,13 @@ window.resetCanvas = resetCanvas;
 window.pepepaint = {
 	canvas_animation_on: false,
 	calculateChaos: (options = {}) => calculateChaos(createFlattenedCanvas(), options),
-	calculateDuration: () => calculateDuration(artwork_started_at),
-	calculatePepeness: (options = {}) => calculatePepeness(createFlattenedCanvas(), options),
+	calculateCroakage: (options = {}) => calculateCroakage(createFlattenedCanvas(), options),
+	calculateQuietus: () => calculateQuietus(quietus_started_at),
 	draw_canvas,
 	draw_ctx,
-	getDistanceTravelled: () => createDistanceTravelledTrait(pointer_distance_travelled, draw_canvas.width, draw_canvas.height),
-	getNumberOfStrokes: () => number_of_strokes,
-	getVariety: () => createVarietyTrait(brush_usage),
+	getBrushiness: () => createBrushinessTrait(brushiness_usage),
+	getRSi: () => rsi,
+	getWanderlust: () => createWanderlustTrait(wanderlust, draw_canvas.width, draw_canvas.height),
 	getLatestSubmissionTraits: () => latest_submission_traits,
 	traits: getPublicTraits,
 	window_w,

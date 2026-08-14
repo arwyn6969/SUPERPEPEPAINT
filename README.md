@@ -120,12 +120,13 @@ The backend validates the request, saves `artwork.png` or `artwork.gif` alongsid
 
 Only these trait values are submitted and archived:
 
-- PEPENESS: `value`
-- Number of strokes: `value`
-- Duration: `formatted`
-- Distance travelled: `value`
+- Croakage: `value`
+- RSi: `value`
+- Quietus elapsed time: `formatted`
+- Quietus: percentage of 100 years
+- Wanderlust: `value`
 - Chaos: `value`
-- Variety: `value`
+- Brushiness: `value`
 
 ### Run the backend locally
 

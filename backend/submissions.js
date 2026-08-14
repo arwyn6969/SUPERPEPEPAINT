@@ -50,13 +50,25 @@ function parseTraits(value) {
 	}
 
 	return {
-		pepeness: requireNumber(traits.pepeness, "Croakage (%)", { max: 100 }),
-		number_of_strokes: requireNumber(traits.number_of_strokes, "RSi (num)", { integer: true }),
-		duration: requireString(traits.duration, "Duration", { min: 1, max: 40 }),
+		croakage: requireNumber(traits.croakage, "Croakage (%)", { max: 100 }),
+		rsi: requireNumber(traits.rsi, "RSi (num)", { integer: true }),
+		quietus_elapsed: requireString(traits.quietus_elapsed, "Quietus elapsed time", { min: 1, max: 40 }),
 		quietus: requireNumber(traits.quietus, "Quietus (%)"),
-		distance_travelled: requireNumber(traits.distance_travelled, "Wanderlust (px)"),
+		wanderlust: requireNumber(traits.wanderlust, "Wanderlust (px)"),
 		chaos: requireNumber(traits.chaos, "Cows", { max: 100 }),
-		variety: requireNumber(traits.variety, "Brushiness (num)", { integer: true }),
+		brushiness: requireNumber(traits.brushiness, "Brushiness (num)", { integer: true }),
+	};
+}
+
+function normalizeArchivedTraits(traits) {
+	return {
+		croakage: traits.croakage ?? traits.pepeness,
+		rsi: traits.rsi ?? traits.number_of_strokes,
+		quietus_elapsed: traits.quietus_elapsed ?? traits.duration,
+		quietus: traits.quietus,
+		wanderlust: traits.wanderlust ?? traits.distance_travelled,
+		chaos: traits.chaos,
+		brushiness: traits.brushiness ?? traits.variety,
 	};
 }
 
@@ -211,6 +223,7 @@ function formatQuietusPercentage(value) {
 
 export function createSubmissionEmail(record, artwork_buffer, from, to) {
 	const description = record.description || "(none)";
+	const traits = normalizeArchivedTraits(record.traits);
 	const rows = [
 		["Submission ID", record.submission_id],
 		["Received", record.received_at],
@@ -218,13 +231,13 @@ export function createSubmissionEmail(record, artwork_buffer, from, to) {
 		["Description", description],
 		["Editions", record.editions],
 		["Wallet address", record.wallet_address],
-		["Croakage (%)", record.traits.pepeness],
-		["RSi (num)", record.traits.number_of_strokes],
-		["Duration", record.traits.duration],
-		["Quietus (%)", formatQuietusPercentage(record.traits.quietus)],
-		["Wanderlust (px)", record.traits.distance_travelled],
-		["Cows", record.traits.chaos],
-		["Brushiness (num)", record.traits.variety],
+		["Croakage (%)", traits.croakage],
+		["RSi (num)", traits.rsi],
+		["Quietus elapsed time", traits.quietus_elapsed],
+		["Quietus (%)", formatQuietusPercentage(traits.quietus)],
+		["Wanderlust (px)", traits.wanderlust],
+		["Cows", traits.chaos],
+		["Brushiness (num)", traits.brushiness],
 	];
 	const text = rows.map(([label, value]) => `${label}: ${value}`).join("\n");
 	const html_rows = rows
@@ -272,16 +285,17 @@ function truncateText(value, maximum_length) {
 
 export function createSubmissionTelegramPost(record) {
 	const header = `PEPEPAINT submission\nTitle: ${record.title}\nDescription: `;
-	const quietus_percentage = formatQuietusPercentage(record.traits.quietus);
+	const traits = normalizeArchivedTraits(record.traits);
+	const quietus_percentage = formatQuietusPercentage(traits.quietus);
 	const suffix = [
 		`Editions: ${record.editions}`,
 		`Wallet address: ${record.wallet_address}`,
-		`Croakage (%): ${record.traits.pepeness}`,
-		`RSi (num): ${record.traits.number_of_strokes}`,
+		`Croakage (%): ${traits.croakage}`,
+		`RSi (num): ${traits.rsi}`,
 		`Quietus (%): ${quietus_percentage}`,
-		`Wanderlust (px): ${record.traits.distance_travelled}`,
-		`Cows: ${record.traits.chaos}`,
-		`Brushiness (num): ${record.traits.variety}`,
+		`Wanderlust (px): ${traits.wanderlust}`,
+		`Cows: ${traits.chaos}`,
+		`Brushiness (num): ${traits.brushiness}`,
 		`Submission ID: ${record.submission_id}`,
 	].join("\n");
 	const description = record.description || "(none)";

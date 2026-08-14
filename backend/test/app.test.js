@@ -18,13 +18,13 @@ function createSubmissionForm(submission_id) {
 	form.set(
 		"traits",
 		JSON.stringify({
-			pepeness: 50,
-			number_of_strokes: 6,
-			duration: "00:00:30",
+			croakage: 50,
+			rsi: 6,
+			quietus_elapsed: "00:00:30",
 			quietus: 9.506e-7,
-			distance_travelled: 120,
+			wanderlust: 120,
 			chaos: 20,
-			variety: 4,
+			brushiness: 4,
 		}),
 	);
 	form.set("artwork", new Blob([PNG], { type: "image/png" }), "artwork.png");

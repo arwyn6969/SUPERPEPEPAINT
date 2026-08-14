@@ -27,13 +27,13 @@ function createSubmission(submission_id = crypto.randomUUID(), artwork = PNG) {
 			editions: "3",
 			wallet_address: VALID_WALLET,
 			traits: JSON.stringify({
-				pepeness: 12.5,
-				number_of_strokes: 4,
-				duration: "00:01:23",
+				croakage: 12.5,
+				rsi: 4,
+				quietus_elapsed: "00:01:23",
 				quietus: 0.0000026301,
-				distance_travelled: 456.7,
+				wanderlust: 456.7,
 				chaos: 45.6,
-				variety: 3,
+				brushiness: 3,
 			}),
 		},
 		{ buffer: artwork, mimetype: "image/png" },
@@ -49,13 +49,13 @@ test("archives a submission with only the selected traits", async () => {
 
 	const record = JSON.parse(await readFile(path.join(storage_root, submission.submission_id, "submission.json"), "utf8"));
 	assert.deepEqual(record.traits, {
-		pepeness: 12.5,
-		number_of_strokes: 4,
-		duration: "00:01:23",
+		croakage: 12.5,
+		rsi: 4,
+		quietus_elapsed: "00:01:23",
 		quietus: 0.0000026301,
-		distance_travelled: 456.7,
+		wanderlust: 456.7,
 		chaos: 45.6,
-		variety: 3,
+		brushiness: 3,
 	});
 	assert.equal(record.email_delivery.status, "sent");
 	assert.equal(delivered.email_delivery.message_id, "email-test-id");
@@ -85,7 +85,7 @@ test("builds an email containing the selected values and artwork", () => {
 	const email = createSubmissionEmail(record, PNG, "submissions@example.com", "owner@example.com");
 	assert.match(email.text, /Croakage \(%\): 12.5/);
 	assert.match(email.text, /RSi \(num\): 4/);
-	assert.match(email.text, /Duration: 00:01:23/);
+	assert.match(email.text, /Quietus elapsed time: 00:01:23/);
 	assert.match(email.text, /Quietus \(%\): 0\.0000026301/);
 	assert.match(email.text, /Wanderlust \(px\): 456.7/);
 	assert.match(email.text, /Cows: 45.6/);
@@ -114,6 +114,31 @@ test("builds a compact Telegram photo post containing the selected values", () =
 	assert.match(post.caption, /Brushiness \(num\): 3/);
 	assert.match(post.caption, new RegExp(`Submission ID: ${record.submission_id}`));
 	assert.match(post.caption, /…/);
+});
+
+test("renders delivery output for archives created before the trait rename", () => {
+	const submission = createSubmission();
+	const record = {
+		...submission,
+		traits: {
+			pepeness: submission.traits.croakage,
+			number_of_strokes: submission.traits.rsi,
+			duration: submission.traits.quietus_elapsed,
+			quietus: submission.traits.quietus,
+			distance_travelled: submission.traits.wanderlust,
+			chaos: submission.traits.chaos,
+			variety: submission.traits.brushiness,
+		},
+		received_at: new Date().toISOString(),
+		artwork: { filename: "artwork.png", content_type: "image/png", size_bytes: PNG.length },
+	};
+
+	const email = createSubmissionEmail(record, PNG, "submissions@example.com", "owner@example.com");
+	const post = createSubmissionTelegramPost(record);
+	assert.match(email.text, /Croakage \(%\): 12.5/);
+	assert.match(email.text, /Brushiness \(num\): 3/);
+	assert.match(post.caption, /RSi \(num\): 4/);
+	assert.match(post.caption, /Wanderlust \(px\): 456.7/);
 });
 
 test("selects Telegram animation and document methods for GIFs and large PNGs", () => {
@@ -200,13 +225,13 @@ test("accepts and archives animated GIF artwork", async () => {
 			editions: "1",
 			wallet_address: VALID_WALLET,
 			traits: JSON.stringify({
-				pepeness: 1,
-				number_of_strokes: 2,
-				duration: "00:00:03",
+				croakage: 1,
+				rsi: 2,
+				quietus_elapsed: "00:00:03",
 				quietus: 9.5064e-8,
-				distance_travelled: 4,
+				wanderlust: 4,
 				chaos: 5,
-				variety: 1,
+				brushiness: 1,
 			}),
 		},
 		{ buffer: GIF, mimetype: "image/gif" },
