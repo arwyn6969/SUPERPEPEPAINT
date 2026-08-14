@@ -160,7 +160,6 @@ test("malformed replies, 5xx responses, and recovered sending state remain uncer
 	for (const response of [
 		new Response("not json", { status: 200 }),
 		jsonResponse(200, { status: "submitted" }),
-		jsonResponse(202, { submission_id: UUID, status: "uncertain" }),
 		jsonResponse(502, { error: "upstream failed" }),
 	]) {
 		const store = new MemoryStore();
@@ -180,18 +179,33 @@ test("malformed replies, 5xx responses, and recovered sending state remain uncer
 	assert.equal((await restarted.getCurrent()).state, SUBMISSION_STATES.SENDING);
 });
 
-test("server-confirmed archival with uncertain provider delivery is accepted without losing retry identity", async () => {
+test("server-confirmed archival with uncertain provider delivery is terminal for browser retry", async () => {
 	const store = new MemoryStore();
 	const client = new SubmissionRetryClient({
 		store,
 		crypto_impl: cryptoSequence(UUID),
-		fetch_impl: async () => jsonResponse(202, { submission_id: UUID, status: "uncertain" }),
+		fetch_impl: async () => jsonResponse(202, { submission_id: UUID, status: "queued", delivery_status: "uncertain" }),
 	});
 	await readyAttempt(client);
 	const result = await client.send(UUID);
 	assert.equal(result.accepted, true);
-	assert.equal(result.record.state, SUBMISSION_STATES.UNCERTAIN);
+	assert.equal(result.record.state, SUBMISSION_STATES.ARCHIVED_QUEUED);
+	assert.equal(result.record.server_delivery_state, "uncertain");
 	assert.equal(result.record.uuid, UUID);
+});
+
+test("legacy server uncertain response is treated as durably archived, not browser-retryable", async () => {
+	const store = new MemoryStore();
+	const client = new SubmissionRetryClient({
+		store,
+		crypto_impl: cryptoSequence(UUID),
+		fetch_impl: async () => jsonResponse(202, { submission_id: UUID, status: "uncertain", message: "Provider confirmation is pending." }),
+	});
+	await readyAttempt(client);
+	const result = await client.send(UUID);
+	assert.equal(result.accepted, true);
+	assert.equal(result.record.state, SUBMISSION_STATES.ARCHIVED_QUEUED);
+	assert.equal(result.record.server_state, "uncertain");
 });
 
 test("a request timeout preserves the frozen UUID and retry package", async () => {

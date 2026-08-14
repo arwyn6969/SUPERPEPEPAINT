@@ -281,7 +281,7 @@ test("supports Telegram-only delivery when Resend has no API key", async () => {
 	}
 });
 
-test("an archived provider timeout reports uncertain and a browser retry preserves its schedule and key", async () => {
+test("an archived provider timeout reports accepted with uncertain delivery and preserves its schedule and key", async () => {
 	const storage_root = await mkdtemp(path.join(os.tmpdir(), "pepepaint-app-"));
 	const submission_id = crypto.randomUUID();
 	const keys = [];
@@ -297,10 +297,15 @@ test("an archived provider timeout reports uncertain and a browser retry preserv
 	try {
 		const first = await fetch(`${server.url}/api/submissions`, { method: "POST", body: createSubmissionForm(submission_id) });
 		assert.equal(first.status, 202);
-		assert.equal((await first.json()).status, "uncertain");
+		assert.deepEqual(await first.json(), {
+			submission_id,
+			status: "queued",
+			delivery_status: "uncertain",
+			message: "Your artwork is safely archived; provider confirmation is pending.",
+		});
 		const retry = await fetch(`${server.url}/api/submissions`, { method: "POST", body: createSubmissionForm(submission_id) });
 		assert.equal(retry.status, 202);
-		assert.equal((await retry.json()).status, "uncertain");
+		assert.equal((await retry.json()).status, "queued");
 		assert.deepEqual(keys, [`pepepaint-${submission_id}`]);
 	} finally {
 		await server.close();

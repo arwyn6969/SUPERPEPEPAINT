@@ -122,6 +122,9 @@ function submissionStatusText(record) {
 		case SUBMISSION_STATES.UNCERTAIN:
 			return `Status: Outcome uncertain—safe retry available${suffix}`;
 		case SUBMISSION_STATES.ARCHIVED_QUEUED:
+			if (record.server_delivery_state === "uncertain" || record.server_state === "uncertain") {
+				return `Status: Safely archived—delivery confirmation pending${suffix}`;
+			}
 			return `Status: Safely archived and queued for delivery${suffix}`;
 		case SUBMISSION_STATES.DELIVERED:
 			return `Status: Delivered${suffix}`;

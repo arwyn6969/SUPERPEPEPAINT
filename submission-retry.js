@@ -186,7 +186,10 @@ export function classifySubmissionResponse(response, result, parse_ok) {
 	if (!parse_ok || !result || typeof result !== "object") return { state: SUBMISSION_STATES.UNCERTAIN, accepted: false };
 	if (response.ok && result.status === "submitted") return { state: SUBMISSION_STATES.DELIVERED, accepted: true };
 	if (response.ok && result.status === "queued") return { state: SUBMISSION_STATES.ARCHIVED_QUEUED, accepted: true };
-	if (response.ok && result.status === "uncertain") return { state: SUBMISSION_STATES.UNCERTAIN, accepted: true };
+	// Legacy servers used "uncertain" for provider confirmation after the
+	// submission was already durably archived. That is a definitive acceptance
+	// from the browser's perspective; provider retry belongs to the outbox.
+	if (response.ok && result.status === "uncertain") return { state: SUBMISSION_STATES.ARCHIVED_QUEUED, accepted: true };
 	if ([400, 409, 413, 422].includes(response.status) && typeof result.error === "string") {
 		return { state: SUBMISSION_STATES.REJECTED, accepted: false };
 	}
@@ -244,6 +247,7 @@ export class SubmissionRetryClient {
 			next_retry_at: null,
 			last_client_error: null,
 			server_state: null,
+			server_delivery_state: null,
 			server_message: null,
 			send_lease: null,
 		};
@@ -335,6 +339,7 @@ export class SubmissionRetryClient {
 					state: final_state,
 					updated_at: this.now(),
 					server_state: parse_ok ? result?.status || null : null,
+					server_delivery_state: parse_ok ? result?.delivery_status || null : null,
 					server_message: parse_ok ? result?.message || result?.error || null : null,
 					last_client_error:
 						final_state === SUBMISSION_STATES.UNCERTAIN

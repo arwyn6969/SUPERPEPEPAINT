@@ -155,8 +155,12 @@ after a restart.
 `POST /api/submissions` returns `201` when a new archive is delivered during
 the request and `200` for an already delivered UUID. If a transient provider
 failure leaves the complete archive queued, it returns `202` with
-`status: "queued"`; the frontend treats that as safely received, resets only
-the form, and does not encourage a duplicate retry. A durable dead-letter
+`status: "queued"`; `delivery_status` distinguishes pending, throttled, and
+uncertain provider delivery without making the browser retry an already
+archived submission. The frontend treats that as safely received, resets only
+the form, and does not encourage a duplicate retry. Older backend responses
+using `status: "uncertain"` after confirmed archival are handled the same way
+for compatibility. A durable dead-letter
 record returns `502` with `status: "failed"` and requires operator review.
 
 The public submission boundary validates complete PNG/GIF container structure,

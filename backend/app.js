@@ -275,10 +275,10 @@ export function createSubmissionApp(options = {}) {
 				const archived = await readArchivedSubmission(configuration.storage_root, submission_id);
 				if (archived) {
 					const delivery = await readDeliveryRecord(configuration.storage_root, submission_id);
-					if (delivery?.status === "delivered") return response.status(200).json({ submission_id, status: "submitted" });
-					if (delivery?.status === "dead_letter") return response.status(502).json({ submission_id, status: "failed", error: "The archived submission requires operator review." });
-					if (delivery?.status === "uncertain") return response.status(202).json({ submission_id, status: "uncertain", message: "Your artwork is safely archived; provider confirmation is pending." });
-					return response.status(202).json({ submission_id, status: "queued", message: "Your artwork is safely archived and queued for delivery." });
+					if (delivery?.status === "delivered") return response.status(200).json({ submission_id, status: "submitted", delivery_status: "delivered" });
+					if (delivery?.status === "dead_letter") return response.status(502).json({ submission_id, status: "failed", delivery_status: "dead_letter", error: "The archived submission requires operator review." });
+					if (delivery?.status === "uncertain") return response.status(202).json({ submission_id, status: "queued", delivery_status: "uncertain", message: "Your artwork is safely archived; provider confirmation is pending." });
+					return response.status(202).json({ submission_id, status: "queued", delivery_status: delivery?.status ?? "pending", message: "Your artwork is safely archived and queued for delivery." });
 				}
 			} catch (error) {
 				readiness.markDurabilityFailure("archive_read_failed", error);
@@ -323,6 +323,7 @@ export function createSubmissionApp(options = {}) {
 				response.status(result.archived.duplicate ? 200 : 201).json({
 					submission_id: submission.submission_id,
 					status: "submitted",
+					delivery_status: "delivered",
 				});
 				return;
 			}
@@ -330,6 +331,7 @@ export function createSubmissionApp(options = {}) {
 				response.status(502).json({
 					submission_id: submission.submission_id,
 					status: "failed",
+					delivery_status: "dead_letter",
 					error: "The archived submission could not be delivered and requires operator review.",
 				});
 				return;
@@ -337,7 +339,8 @@ export function createSubmissionApp(options = {}) {
 			if (result.delivery?.status === "uncertain") {
 				response.status(202).json({
 					submission_id: submission.submission_id,
-					status: "uncertain",
+					status: "queued",
+					delivery_status: "uncertain",
 					message: "Your artwork is safely archived; provider confirmation is pending.",
 				});
 				return;
@@ -345,6 +348,7 @@ export function createSubmissionApp(options = {}) {
 			response.status(202).json({
 				submission_id: submission.submission_id,
 				status: "queued",
+				delivery_status: result.delivery?.status ?? "pending",
 				message: "Your artwork is safely archived and queued for delivery.",
 			});
 		} catch (error) {
