@@ -2350,7 +2350,6 @@ function saveCanvasState() {
 }
 
 const canvas_storage_database_name = "pepepaint";
-const canvas_storage_database_version = 1;
 const canvas_storage_store_name = "canvas_saves";
 const canvas_storage_record_id = "latest";
 let canvas_storage_database_promise = null;
@@ -2378,7 +2377,9 @@ function openCanvasStorageDatabase() {
 
 	if (!canvas_storage_database_promise) {
 		canvas_storage_database_promise = new Promise((resolve, reject) => {
-			const request = indexedDB.open(canvas_storage_database_name, canvas_storage_database_version);
+			// Open the browser's existing database version. Passing an older
+			// version here prevents access after a newer deployment has upgraded it.
+			const request = indexedDB.open(canvas_storage_database_name);
 
 			request.onupgradeneeded = () => {
 				const database = request.result;

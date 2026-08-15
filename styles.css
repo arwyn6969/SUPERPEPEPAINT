@@ -177,7 +177,6 @@ a:active {
 	color: green;
 	padding: 30px 34px;
 	overflow: hidden;
-	overscroll-behavior: none;
 	z-index: 99999999999999;
 	border: none;
 }
