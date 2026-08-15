@@ -18,7 +18,7 @@ const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
 const GIF = Buffer.from("GIF89a-test", "ascii");
 const VALID_WALLET = "tz1VSUr8wwNhLAzempoch5d6hLRiTh8Cjcjb";
 
-function createSubmission(submission_id = crypto.randomUUID(), artwork = PNG) {
+function createSubmission(submission_id = crypto.randomUUID(), artwork = PNG, trait_overrides = {}) {
 	return validateSubmission(
 		{
 			submission_id,
@@ -34,6 +34,7 @@ function createSubmission(submission_id = crypto.randomUUID(), artwork = PNG) {
 				wanderlust: 456.7,
 				chaos: 45.6,
 				brushiness: 3,
+				...trait_overrides,
 			}),
 		},
 		{ buffer: artwork, mimetype: "image/png" },
@@ -213,6 +214,10 @@ test("reports Telegram API errors without treating them as delivered", async () 
 
 test("rejects a non-image upload", () => {
 	assert.throws(() => createSubmission(crypto.randomUUID(), Buffer.from("not an image")), SubmissionValidationError);
+});
+
+test("rejects Quietus percentages above 100", () => {
+	assert.throws(() => createSubmission(crypto.randomUUID(), PNG, { quietus: 100.0001 }), SubmissionValidationError);
 });
 
 test("accepts and archives animated GIF artwork", async () => {

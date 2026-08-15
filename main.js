@@ -38,6 +38,10 @@ const submission_submit_button = document.getElementById("submission_submit_butt
 let latest_submission_traits = null;
 let pending_submission_id = null;
 
+function invalidatePendingSubmission() {
+	pending_submission_id = null;
+}
+
 // GALLERY BUTTON
 gallery_button?.addEventListener("click", () => {
 	window.open("https://objkt.com/users/tz1QQkaUxPXKdpkPYe4w999wF9Abggicdad5/created", "_blank", "noopener,noreferrer");
@@ -61,7 +65,7 @@ new_canvas_button?.addEventListener("click", async () => {
 });
 
 submission_form?.addEventListener("input", () => {
-	pending_submission_id = null;
+	invalidatePendingSubmission();
 });
 
 function calculateSubmissionTraits(canvas, ended_at = Date.now()) {
@@ -103,8 +107,9 @@ submission_form?.addEventListener("submit", async (event) => {
 
 		const artwork = await createSubmissionArtwork();
 		pending_submission_id ||= crypto.randomUUID();
+		const submission_id = pending_submission_id;
 		const submission_data = new FormData(submission_form);
-		submission_data.set("submission_id", pending_submission_id);
+		submission_data.set("submission_id", submission_id);
 		submission_data.set("traits", JSON.stringify(latest_submission_traits));
 		submission_data.set("artwork", artwork.blob, artwork.filename);
 
@@ -115,11 +120,12 @@ submission_form?.addEventListener("submit", async (event) => {
 			throw new Error(result.error || "The submission could not be delivered.");
 		}
 
-		const submitted_id = pending_submission_id;
-		pending_submission_id = null;
+		if (pending_submission_id === submission_id) {
+			invalidatePendingSubmission();
+		}
 		submission_form.reset();
-		console.info("PEPEPAINT submission sent", { submission_id: submitted_id, traits: latest_submission_traits });
-		if (submission_status) submission_status.textContent = `Status: Submitted successfully · ${submitted_id}`;
+		console.info("PEPEPAINT submission sent", { submission_id, traits: latest_submission_traits });
+		if (submission_status) submission_status.textContent = `Status: Submitted successfully · ${submission_id}`;
 	} catch (error) {
 		console.error("PEPEPAINT submission failed.", error);
 		if (submission_status) submission_status.textContent = `Status: ${error.message}`;
@@ -2336,6 +2342,7 @@ function normalizeCanvasHistoryState(state) {
 }
 
 function saveCanvasState() {
+	invalidatePendingSubmission();
 	const canvasHistory = draw_canvas_data.history;
 	canvasHistory.push(createCanvasHistoryState());
 	if (canvasHistory.length > 50) canvasHistory.shift();
@@ -2590,6 +2597,7 @@ function layerUndo() {
 
 	const history = draw_canvas_data.history;
 	if (history.length > 0) {
+		invalidatePendingSubmission();
 		const redoStack = draw_canvas_data.redoStack;
 		redoStack.push(createCanvasHistoryState());
 		const previousState = normalizeCanvasHistoryState(history.pop());
@@ -2621,6 +2629,7 @@ function layerRedo() {
 
 	const redoStack = draw_canvas_data.redoStack;
 	if (redoStack.length > 0) {
+		invalidatePendingSubmission();
 		const history = draw_canvas_data.history;
 		history.push(createCanvasHistoryState());
 		if (history.length > 50) history.shift();
@@ -3357,6 +3366,7 @@ async function resetCanvas() {
 		draw_canvas_data.history = [];
 		draw_canvas_data.redoStack = [];
 		draw_ctx.drawImage(template_image, 0, 0, window_w, window_h);
+		invalidatePendingSubmission();
 		showFeedbackNotification("Canvas reset");
 		return true;
 	} catch (error) {
@@ -3381,6 +3391,7 @@ window.pepepaint = {
 	getRSi: () => rsi,
 	getWanderlust: () => createWanderlustTrait(wanderlust, draw_canvas.width, draw_canvas.height),
 	getLatestSubmissionTraits: () => latest_submission_traits,
+	invalidatePendingSubmission,
 	traits: getPublicTraits,
 	window_w,
 	window_h,

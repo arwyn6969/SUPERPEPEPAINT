@@ -24,8 +24,18 @@ function positiveInteger(value, fallback) {
 
 function createRateLimiter({ window_ms, maximum }) {
 	const clients = new Map();
+	let next_cleanup_at = Date.now() + window_ms;
 	return (request, response, next) => {
 		const now = Date.now();
+		if (now >= next_cleanup_at) {
+			for (const [client_key, client] of clients) {
+				if (client.reset_at <= now) {
+					clients.delete(client_key);
+				}
+			}
+			next_cleanup_at = now + window_ms;
+		}
+
 		const key = request.ip;
 		const current = clients.get(key);
 		if (!current || current.reset_at <= now) {

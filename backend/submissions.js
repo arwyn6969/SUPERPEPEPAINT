@@ -53,7 +53,7 @@ function parseTraits(value) {
 		croakage: requireNumber(traits.croakage, "Croakage (%)", { max: 100 }),
 		rsi: requireNumber(traits.rsi, "RSi (num)", { integer: true }),
 		quietus_elapsed: requireString(traits.quietus_elapsed, "Quietus elapsed time", { min: 1, max: 40 }),
-		quietus: requireNumber(traits.quietus, "Quietus (%)"),
+		quietus: requireNumber(traits.quietus, "Quietus (%)", { max: 100 }),
 		wanderlust: requireNumber(traits.wanderlust, "Wanderlust (px)"),
 		chaos: requireNumber(traits.chaos, "Cows", { max: 100 }),
 		brushiness: requireNumber(traits.brushiness, "Brushiness (num)", { integer: true }),
