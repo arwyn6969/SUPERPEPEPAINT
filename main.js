@@ -1,11 +1,4 @@
-import {
-	calculateChaos,
-	calculateCroakage,
-	calculateQuietus,
-	createBrushinessTrait,
-	createRSiTrait,
-	createWanderlustTrait,
-} from "./traits.js";
+import { calculateChaos, calculateCroakage, calculateQuietus, createBrushinessTrait, createRSiTrait, createWanderlustTrait } from "./traits.js";
 
 // It's PEPEPAINT v1 first uploaded on 7th Oct 2025
 
@@ -2065,6 +2058,10 @@ let image_brush_array = [
 	"heart02",
 	"sun4",
 	"ufo4",
+	"wifejak1",
+	"wifejakpepe",
+	"trad",
+	"doomer",
 	"cat1",
 	"cat2",
 	"yellingatcat",
@@ -2089,10 +2086,6 @@ let image_brush_array = [
 	"sminem1",
 	"spoderman1",
 	"spongebob1",
-	"wifejak1",
-	"wifejakpepe",
-	"trad",
-	"doomer",
 	"wojak2",
 	"wojak3",
 	"wojak6",
