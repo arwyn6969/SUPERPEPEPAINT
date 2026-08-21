@@ -220,6 +220,24 @@ test("rejects Quietus percentages above 100", () => {
 	assert.throws(() => createSubmission(crypto.randomUUID(), PNG, { quietus: 100.0001 }), SubmissionValidationError);
 });
 
+test("accepts any alphanumeric wallet address", () => {
+	const submission = createSubmission();
+	const body = {
+		submission_id: crypto.randomUUID(),
+		title: submission.title,
+		description: submission.description,
+		editions: String(submission.editions),
+		wallet_address: "AnyAddress123",
+		traits: JSON.stringify(submission.traits),
+	};
+
+	assert.equal(validateSubmission(body, { buffer: PNG, mimetype: "image/png" }).wallet_address, "AnyAddress123");
+	assert.throws(
+		() => validateSubmission({ ...body, wallet_address: "not an address" }, { buffer: PNG, mimetype: "image/png" }),
+		/letters and numbers only/,
+	);
+});
+
 test("accepts and archives animated GIF artwork", async () => {
 	const storage_root = await mkdtemp(path.join(os.tmpdir(), "pepepaint-submissions-"));
 	const submission = validateSubmission(

@@ -98,7 +98,7 @@
 
 			<!-- SUBMISSIONS -->
 			<dialog id="submission_dialog" class="submission_dialog">
-				<form id="submission_form" class="submission_form">
+				<form id="submission_form" class="submission_form" novalidate>
 					<div class="submission_form_header">
 						<div id="submission_title">Submissions</div>
 						<button type="button" class="header_button submission_close_button" id="submission_close_button" aria-label="Close submission window">
@@ -120,8 +120,9 @@
 								id="submission_address_input"
 								name="wallet_address"
 								type="text"
-								minlength="36"
 								maxlength="120"
+								pattern="[A-Za-z0-9]+"
+								title="Use letters and numbers only"
 								autocapitalize="none"
 								autocomplete="off"
 								spellcheck="false"

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-const TEZOS_ADDRESS_PATTERN = /^(?:tz[1-4]|KT1)[1-9A-HJ-NP-Za-km-z]{33}$/;
+const ALPHANUMERIC_PATTERN = /^[A-Za-z0-9]+$/;
 const SUBMISSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ALLOWED_ARTWORK_TYPES = new Map([
 	["image/png", { extension: "png", signature: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) }],
@@ -105,9 +105,9 @@ export function validateSubmission(body, file) {
 		throw new SubmissionValidationError("Editions must be a whole number between 1 and 10000.");
 	}
 
-	const wallet_address = requireString(body.wallet_address, "Wallet address", { min: 36, max: 120 });
-	if (!TEZOS_ADDRESS_PATTERN.test(wallet_address)) {
-		throw new SubmissionValidationError("Wallet address must be a valid Tezos tz or KT1 address.");
+	const wallet_address = requireString(body.wallet_address, "Wallet address", { min: 1, max: 120 });
+	if (!ALPHANUMERIC_PATTERN.test(wallet_address)) {
+		throw new SubmissionValidationError("Wallet address must contain letters and numbers only.");
 	}
 
 	return {

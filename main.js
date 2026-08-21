@@ -35,6 +35,12 @@ function invalidatePendingSubmission() {
 	pending_submission_id = null;
 }
 
+function setSubmissionStatus(message, warning = false) {
+	if (!submission_status) return;
+	submission_status.textContent = `Status: ${message}`;
+	submission_status.classList.toggle("warning", warning);
+}
+
 // GALLERY BUTTON
 gallery_button?.addEventListener("click", () => {
 	window.open("https://objkt.com/users/tz1QQkaUxPXKdpkPYe4w999wF9Abggicdad5/created", "_blank", "noopener,noreferrer");
@@ -59,6 +65,9 @@ new_canvas_button?.addEventListener("click", async () => {
 
 submission_form?.addEventListener("input", () => {
 	invalidatePendingSubmission();
+	if (submission_status?.classList.contains("warning")) {
+		setSubmissionStatus("Fill in the form");
+	}
 });
 
 function calculateSubmissionTraits(canvas, ended_at = Date.now()) {
@@ -88,10 +97,15 @@ function getPublicTraits() {
 
 submission_form?.addEventListener("submit", async (event) => {
 	event.preventDefault();
-	if (!submission_form.reportValidity()) return;
+	if (!submission_form.checkValidity()) {
+		const invalid_field = submission_form.querySelector(":invalid");
+		setSubmissionStatus(invalid_field?.validationMessage || "Check the highlighted fields.", true);
+		invalid_field?.focus();
+		return;
+	}
 
 	submission_submit_button.disabled = true;
-	if (submission_status) submission_status.textContent = "Status: Preparing submission…";
+	setSubmissionStatus("Preparing submission…");
 
 	try {
 		const submission_canvas = createFlattenedCanvas();
@@ -106,7 +120,7 @@ submission_form?.addEventListener("submit", async (event) => {
 		submission_data.set("traits", JSON.stringify(latest_submission_traits));
 		submission_data.set("artwork", artwork.blob, artwork.filename);
 
-		if (submission_status) submission_status.textContent = "Status: Sending submission…";
+		setSubmissionStatus("Sending submission…");
 		const response = await fetch("/api/submissions", { method: "POST", body: submission_data });
 		const result = await response.json().catch(() => ({}));
 		if (!response.ok) {
@@ -118,10 +132,10 @@ submission_form?.addEventListener("submit", async (event) => {
 		}
 		submission_form.reset();
 		console.info("PEPEPAINT submission sent", { submission_id, traits: latest_submission_traits });
-		if (submission_status) submission_status.textContent = `Status: Submitted successfully · ${submission_id}`;
+		setSubmissionStatus(`Submitted successfully · ${submission_id}`);
 	} catch (error) {
 		console.error("PEPEPAINT submission failed.", error);
-		if (submission_status) submission_status.textContent = `Status: ${error.message}`;
+		setSubmissionStatus(error.message, true);
 	} finally {
 		submission_submit_button.disabled = false;
 	}
