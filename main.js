@@ -3303,7 +3303,7 @@ function loadTemplateCardImage() {
 		const templateImage = new Image();
 		templateImage.onload = () => resolve(templateImage);
 		templateImage.onerror = () => reject(new Error("Could not load the default card template."));
-		templateImage.src = "brushes/template02.png";
+		templateImage.src = "brushes/template01.png";
 	});
 }
 

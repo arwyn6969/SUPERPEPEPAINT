@@ -331,8 +331,8 @@ a:active {
 	user-select: none;
 	width: 400px;
 	position: absolute;
-	top: 316px;
-	left: 0;
+	top: 317px;
+	left: 1px;
 	height: 24px;
 	z-index: 99999999999999;
 }
@@ -347,7 +347,7 @@ a:active {
 	width: 400px;
 	position: fixed;
 	top: 366px;
-	left: 0;
+	left: 1px;
 	/* height: 150px; */
 	z-index: 99999999999999;
 }
@@ -447,7 +447,7 @@ a:active {
 	user-select: none;
 	width: 400px;
 	position: fixed;
-	top: 80px; /* 510px */
+	top: 83px; /* 510px */
 	left: 0px;
 	/* height: 44px; */
 	z-index: 99999999999999;
@@ -529,7 +529,7 @@ a:active {
 	flex-flow: column wrap;
 	justify-content: flex-start;
 	align-items: flex-start;
-	padding: 0 36px;
+	padding: 0 50px;
 }
 
 .controls {
