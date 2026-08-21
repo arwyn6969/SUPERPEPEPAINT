@@ -103,16 +103,14 @@ body::-webkit-scrollbar {
 	flex-flow: row nowrap;
 	justify-content: space-between;
 	align-items: center;
-	padding: 0 34px;
+	padding: 0 38px;
 }
 
 #header_title {
 	font-family: "unscii8", monospace;
 	font-size: 1.3em;
-}
-
-.header_item {
-	padding: 0 4px;
+	position: relative;
+	top: 1px;
 }
 
 #button_container {
@@ -132,7 +130,6 @@ body::-webkit-scrollbar {
 	margin: 2px;
 	cursor: pointer;
 	color: green;
-	margin: 4px 2px;
 	text-align: center;
 	cursor: pointer;
 }
@@ -507,7 +504,7 @@ a:active {
 
 .menu_control_title {
 	font-size: 1em;
-	padding: 0 2px;
+	padding: 0 3px;
 }
 
 .info_row {
@@ -551,7 +548,7 @@ a:active {
 }
 
 .menu_range_input_container {
-	width: 120px;
+	width: 118px;
 	position: relative;
 	height: 24px;
 	display: flex;
