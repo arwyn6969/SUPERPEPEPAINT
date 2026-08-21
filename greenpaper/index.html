@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>GREENPAPER — PEPEPAINT</title>
+		<style>
+			@font-face {
+				font-family: "unscii8";
+				src: url("../fonts/unscii-8.otf") format("opentype");
+				font-display: swap;
+			}
+
+			@font-face {
+				font-family: "unscii8tall";
+				src: url("../fonts/unscii-8-tall.otf") format("opentype");
+				font-display: swap;
+			}
+
+			:root {
+				color-scheme: light;
+				font-family: "unscii8tall", monospace;
+				background: #ffffff;
+				color: green;
+			}
+
+			* {
+				box-sizing: border-box;
+			}
+
+			body {
+				font-size: 110%;
+				min-height: 100vh;
+				min-width: 400px;
+				margin: 0;
+				display: grid;
+				place-items: center;
+				background: #ffffff;
+			}
+
+			main {
+				width: 400px;
+				height: 560px;
+				display: flex;
+				flex-direction: column;
+				background: #ffffff url("../brushes/template03.png") center / cover no-repeat;
+				color: green;
+				text-shadow: 2px 2px 0 #ffffff;
+				position: relative;
+			}
+
+			h1 {
+				position: absolute;
+				top: 24px;
+				left: 36px;
+				font-size: 1.2em;
+				line-height: 1;
+				font-family: "unscii8", monospace;
+				color: green;
+			}
+
+			#greenpaper_steps {
+				position: absolute;
+				top: 90px;
+				left: 0px;
+				padding: 0 40px;
+			}
+
+			strong {
+				color: green;
+				font-weight: bold;
+				font-size: 1.1em;
+			}
+
+			hr {
+				position: absolute;
+				top: 200px;
+				left: 40px;
+				width: 314px;
+				border-top: 1px dashed green;
+			}
+
+			#greenpaper_details {
+				position: absolute;
+				top: 240px;
+				left: 0;
+				padding: 0 40px;
+			}
+
+			p {
+				margin: 0 0 12px;
+				font-size: 0.875em;
+			}
+
+			p:last-child {
+				margin-bottom: 0;
+			}
+
+			.create-button {
+				margin-top: auto;
+				/* width: 150px; */
+				position: absolute;
+				top: 500px;
+				left: 50%;
+				transform: translateX(-50%);
+				padding: 2px;
+				border: 4px outset rgb(236, 236, 236);
+				font-size: 1em;
+				line-height: 1;
+				text-align: center;
+				text-decoration: none;
+				color: green;
+				background: #ffffff;
+			}
+
+			.create-button:hover,
+			.create-button:focus-visible {
+				color: green;
+				background: #e9ffe9;
+			}
+		</style>
+	</head>
+	<body>
+		<main>
+			<h1 id="greenpaper_title">GREENPAPER:</h1>
+
+			<div id="greenpaper_steps">
+				<p><strong>1. DRAW</strong> anything you want</p>
+				<p><strong>2. SUBMIT</strong> editions 1 to 10000</p>
+				<p><strong>3. AWAIT</strong> approval</p>
+			</div>
+
+			<hr id="greenpaper_divider"></hr>
+
+			<div id="greenpaper_details" class="details">
+				<p>⬬ You only get one submission</p>
+				<p>⬬ PEPEPAINT gallery will mint your card</p>
+				<p>⬬ PEPEPAINT gallery will appear as an artist with you</p>
+				<p>⬬ Entire supply of card is delivered directly to your wallet</p>
+				<p>⬬ All royalties (10%) go to you, PEPEPAINT takes no cut.</p>
+				<p>⬬ If you wish to gift a card to PEPEPAINT gallery we will love you forever</p>
+			</div>
+
+			<a id="greenpaper_create_button" class="create-button" href="https://pepepaint.journeypaint.fun/">Create</a>
+		</main>
+	</body>
+</html>

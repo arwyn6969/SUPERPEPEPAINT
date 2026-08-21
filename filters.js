@@ -483,7 +483,7 @@ function renderAnimationFrameToCanvas(context, canvas, options = {}) {
 	}
 
 	if (animated_vhs_on) {
-		applyVhsToCanvas2(context, canvas, false);
+		applyVhsToCanvas(context, canvas, false);
 	}
 
 	if (animated_dither_on) {
@@ -1164,7 +1164,7 @@ function applyVhsToCanvas2(context, canvas, save_history = true) {
 }
 
 function vhs() {
-	applyVhsToCanvas2(draw_ctx, draw_canvas, true);
+	applyVhsToCanvas(draw_ctx, draw_canvas, true);
 }
 
 function animatedVhs() {

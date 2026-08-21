@@ -77,6 +77,7 @@ main.js
 filters.js
 traits.js
 styles.css
+greenpaper/
 brushes/
 fonts/
 ```
