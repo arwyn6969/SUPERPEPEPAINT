@@ -43,7 +43,7 @@ function setSubmissionStatus(message, warning = false) {
 
 // GALLERY BUTTON
 gallery_button?.addEventListener("click", () => {
-	window.open("https://objkt.com/users/tz1QQkaUxPXKdpkPYe4w999wF9Abggicdad5/created", "_blank", "noopener,noreferrer");
+	window.open("https://objkt.com/collections/KT18yLY7fzR5ZMKTaYQD2rNSvB6Go2VuW8gG", "_blank", "noopener,noreferrer");
 });
 
 submission_button?.addEventListener("click", () => {
