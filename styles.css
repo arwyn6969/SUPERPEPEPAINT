@@ -284,10 +284,20 @@ a:active {
 	top: 360px;
 	left: 0;
 	padding: 0 40px;
+	width: 290px;
 }
 
 .submission_status.warning {
 	color: red;
+}
+
+.submission_preview_canvas {
+	position: absolute;
+	right: 44px;
+	bottom: 64px;
+	width: 100px;
+	height: 140px;
+	background: #ffffff;
 }
 
 #canvas_container {

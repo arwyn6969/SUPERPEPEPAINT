@@ -28,8 +28,11 @@ const submission_status = document.getElementById("submission_status");
 const submission_close_button = document.getElementById("submission_close_button");
 const submission_cancel_button = document.getElementById("submission_cancel_button");
 const submission_submit_button = document.getElementById("submission_submit_button");
+const submission_preview_canvas = document.getElementById("submission_preview_canvas");
+const submission_preview_ctx = submission_preview_canvas?.getContext("2d");
 let latest_submission_traits = null;
 let pending_submission_id = null;
+let submission_preview_animation_frame = null;
 
 function invalidatePendingSubmission() {
 	pending_submission_id = null;
@@ -49,6 +52,7 @@ gallery_button?.addEventListener("click", () => {
 submission_button?.addEventListener("click", () => {
 	if (!submission_dialog.open) {
 		submission_dialog.show();
+		startSubmissionPreview();
 	}
 });
 
@@ -62,6 +66,7 @@ new_canvas_button?.addEventListener("click", async () => {
 [submission_close_button, submission_cancel_button].forEach((button) => {
 	button?.addEventListener("click", () => submission_dialog.close());
 });
+submission_dialog?.addEventListener("close", stopSubmissionPreview);
 
 submission_form?.addEventListener("input", () => {
 	invalidatePendingSubmission();
@@ -636,6 +641,42 @@ function createFlattenedCanvas() {
 	offscreenCtx.drawImage(draw_canvas, 0, 0, window_w, window_h);
 
 	return offscreenCanvas;
+}
+
+function updateSubmissionPreview() {
+	if (!submission_preview_canvas || !submission_preview_ctx) return;
+
+	submission_preview_ctx.clearRect(0, 0, submission_preview_canvas.width, submission_preview_canvas.height);
+	submission_preview_ctx.save();
+	submission_preview_ctx.globalAlpha = draw_canvas_data.opacity;
+	submission_preview_ctx.drawImage(draw_canvas, 0, 0, submission_preview_canvas.width, submission_preview_canvas.height);
+	submission_preview_ctx.restore();
+}
+
+function animateSubmissionPreview() {
+	if (!submission_dialog?.open) {
+		submission_preview_animation_frame = null;
+		return;
+	}
+
+	if (window.pepepaint.canvas_animation_on) {
+		updateSubmissionPreview();
+	}
+
+	submission_preview_animation_frame = requestAnimationFrame(animateSubmissionPreview);
+}
+
+function startSubmissionPreview() {
+	stopSubmissionPreview();
+	updateSubmissionPreview();
+	submission_preview_animation_frame = requestAnimationFrame(animateSubmissionPreview);
+}
+
+function stopSubmissionPreview() {
+	if (submission_preview_animation_frame !== null) {
+		cancelAnimationFrame(submission_preview_animation_frame);
+		submission_preview_animation_frame = null;
+	}
 }
 
 function getExportFileName(prefix = "PEPEPAINT") {
