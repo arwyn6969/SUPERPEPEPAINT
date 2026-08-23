@@ -220,7 +220,7 @@ test("rejects Quietus percentages above 100", () => {
 	assert.throws(() => createSubmission(crypto.randomUUID(), PNG, { quietus: 100.0001 }), SubmissionValidationError);
 });
 
-test("accepts any alphanumeric wallet address", () => {
+test("accepts alphanumeric and Tezos domain wallet addresses", () => {
 	const submission = createSubmission();
 	const body = {
 		submission_id: crypto.randomUUID(),
@@ -232,9 +232,13 @@ test("accepts any alphanumeric wallet address", () => {
 	};
 
 	assert.equal(validateSubmission(body, { buffer: PNG, mimetype: "image/png" }).wallet_address, "AnyAddress123");
+	assert.equal(
+		validateSubmission({ ...body, wallet_address: "itsnathan.tez" }, { buffer: PNG, mimetype: "image/png" }).wallet_address,
+		"itsnathan.tez",
+	);
 	assert.throws(
 		() => validateSubmission({ ...body, wallet_address: "not an address" }, { buffer: PNG, mimetype: "image/png" }),
-		/letters and numbers only/,
+		/letters, numbers and full stops only/,
 	);
 });
 
