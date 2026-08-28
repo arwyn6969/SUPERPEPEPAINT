@@ -230,12 +230,12 @@ function createSubmissionDetailRows(record) {
 		["Description:", record.description || "(none)"],
 		["Editions", record.editions],
 		["Wallet address", record.wallet_address],
-		["Croakage (%)", traits.croakage],
-		["RSi (num)", traits.rsi],
-		["Brushiness (num)", traits.brushiness],
-		["Quietus (%)", formatQuietusPercentage(traits.quietus)],
+		["Croakage", traits.croakage],
+		["RSi", traits.rsi],
+		["Brushiness", traits.brushiness],
+		["Quietus", formatQuietusPercentage(traits.quietus)],
 		["Quietus elapsed time", traits.quietus_elapsed],
-		["Wanderlust (px)", traits.wanderlust],
+		["Wanderlust", traits.wanderlust],
 		["Cows", traits.chaos],
 	];
 }

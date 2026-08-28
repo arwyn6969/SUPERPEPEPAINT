@@ -92,12 +92,12 @@ test("builds an email containing the selected values and artwork", () => {
 		"Description:\tA test submission",
 		"Editions\t3",
 		`Wallet address\t${VALID_WALLET}`,
-		"Croakage (%)\t12.5",
-		"RSi (num)\t4",
-		"Brushiness (num)\t3",
-		"Quietus (%)\t0.0000026301",
+		"Croakage\t12.5",
+		"RSi\t4",
+		"Brushiness\t3",
+		"Quietus\t0.0000026301",
 		"Quietus elapsed time\t00:01:23",
-		"Wanderlust (px)\t456.7",
+		"Wanderlust\t456.7",
 		"Cows\t45.6",
 	].join("\n\n"));
 	assert.equal(email.attachments[0].filename, "artwork.png");
@@ -117,7 +117,7 @@ test("builds a compact Telegram photo post containing the selected values", () =
 	assert.equal(post.media_field, "photo");
 	assert.ok(post.caption.length <= 1024);
 	assert.match(post.caption, new RegExp(`^PEPEPAINT submission\\n\\nSubmission ID\\t${record.submission_id}\\n\\nReceived\\t${record.received_at}\\n\\nTitle\\tTest artwork\\n\\nDescription:\\t`));
-	assert.match(post.caption, /\n\nCroakage \(%\)\t12.5\n\nRSi \(num\)\t4\n\nBrushiness \(num\)\t3\n\nQuietus \(%\)\t0\.0000026301\n\nQuietus elapsed time\t00:01:23\n\nWanderlust \(px\)\t456.7\n\nCows\t45.6$/);
+	assert.match(post.caption, /\n\nCroakage\t12.5\n\nRSi\t4\n\nBrushiness\t3\n\nQuietus\t0\.0000026301\n\nQuietus elapsed time\t00:01:23\n\nWanderlust\t456.7\n\nCows\t45.6$/);
 	assert.match(post.caption, /…/);
 });
 
@@ -140,10 +140,10 @@ test("renders delivery output for archives created before the trait rename", () 
 
 	const email = createSubmissionEmail(record, PNG, "submissions@example.com", "owner@example.com");
 	const post = createSubmissionTelegramPost(record);
-	assert.match(email.text, /Croakage \(%\)\t12.5/);
-	assert.match(email.text, /Brushiness \(num\)\t3/);
-	assert.match(post.caption, /RSi \(num\)\t4/);
-	assert.match(post.caption, /Wanderlust \(px\)\t456.7/);
+	assert.match(email.text, /Croakage\t12.5/);
+	assert.match(email.text, /Brushiness\t3/);
+	assert.match(post.caption, /RSi\t4/);
+	assert.match(post.caption, /Wanderlust\t456.7/);
 });
 
 test("selects Telegram animation and document methods for GIFs and large PNGs", () => {
