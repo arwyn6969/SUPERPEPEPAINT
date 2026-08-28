@@ -221,25 +221,28 @@ function formatQuietusPercentage(value) {
 	return value.toFixed(12).replace(/0+$/, "").replace(/\.$/, "");
 }
 
-export function createSubmissionEmail(record, artwork_buffer, from, to) {
-	const description = record.description || "(none)";
+function createSubmissionDetailRows(record) {
 	const traits = normalizeArchivedTraits(record.traits);
-	const rows = [
+	return [
 		["Submission ID", record.submission_id],
 		["Received", record.received_at],
 		["Title", record.title],
-		["Description", description],
+		["Description:", record.description || "(none)"],
 		["Editions", record.editions],
 		["Wallet address", record.wallet_address],
 		["Croakage (%)", traits.croakage],
 		["RSi (num)", traits.rsi],
-		["Quietus elapsed time", traits.quietus_elapsed],
+		["Brushiness (num)", traits.brushiness],
 		["Quietus (%)", formatQuietusPercentage(traits.quietus)],
+		["Quietus elapsed time", traits.quietus_elapsed],
 		["Wanderlust (px)", traits.wanderlust],
 		["Cows", traits.chaos],
-		["Brushiness (num)", traits.brushiness],
 	];
-	const text = rows.map(([label, value]) => `${label}: ${value}`).join("\n");
+}
+
+export function createSubmissionEmail(record, artwork_buffer, from, to) {
+	const rows = createSubmissionDetailRows(record);
+	const text = `PEPEPAINT submission\n\n${rows.map(([label, value]) => `${label}\t${value}`).join("\n\n")}`;
 	const html_rows = rows
 		.map(([label, value]) => `<tr><th align="left" valign="top">${escapeHtml(label)}</th><td>${escapeHtml(value)}</td></tr>`)
 		.join("");
@@ -284,23 +287,17 @@ function truncateText(value, maximum_length) {
 }
 
 export function createSubmissionTelegramPost(record) {
-	const header = `PEPEPAINT submission\nTitle: ${record.title}\nDescription: `;
-	const traits = normalizeArchivedTraits(record.traits);
-	const quietus_percentage = formatQuietusPercentage(traits.quietus);
-	const suffix = [
-		`Editions: ${record.editions}`,
-		`Wallet address: ${record.wallet_address}`,
-		`Croakage (%): ${traits.croakage}`,
-		`RSi (num): ${traits.rsi}`,
-		`Quietus (%): ${quietus_percentage}`,
-		`Wanderlust (px): ${traits.wanderlust}`,
-		`Cows: ${traits.chaos}`,
-		`Brushiness (num): ${traits.brushiness}`,
-		`Submission ID: ${record.submission_id}`,
-	].join("\n");
-	const description = record.description || "(none)";
-	const description_length = Math.max(0, TELEGRAM_CAPTION_MAX_LENGTH - header.length - suffix.length - 1);
-	const caption = `${header}${truncateText(description, description_length)}\n${suffix}`;
+	const rows = createSubmissionDetailRows(record);
+	const prefix = `PEPEPAINT submission\n\n${rows
+		.slice(0, 3)
+		.map(([label, value]) => `${label}\t${value}`)
+		.join("\n\n")}\n\n${rows[3][0]}\t`;
+	const suffix = rows
+		.slice(4)
+		.map(([label, value]) => `${label}\t${value}`)
+		.join("\n\n");
+	const description_length = Math.max(0, TELEGRAM_CAPTION_MAX_LENGTH - prefix.length - suffix.length - 2);
+	const caption = `${prefix}${truncateText(String(rows[3][1]), description_length)}\n\n${suffix}`;
 
 	if (record.artwork.content_type === "image/gif") {
 		return { method: "sendAnimation", media_field: "animation", caption };
