@@ -10,7 +10,7 @@ const path = require("path");
 const vm = require("vm");
 
 const ROOT = path.join(__dirname, "..");
-const SRC = ["bootloader.js", "stamps.js", "main.js"].map((f) =>
+const SRC = ["bootloader.js", "stamps.js", "main.js", "mint.js"].map((f) =>
 	fs.readFileSync(path.join(ROOT, f), "utf8")
 );
 
@@ -19,9 +19,14 @@ function makeElementStub() {
 		style: {},
 		children: [],
 		checked: false,
+		open: false,
 		value: "120",
 		textContent: "",
 		innerHTML: "",
+		show() { this.open = true; },
+		close() { this.open = false; },
+		focus() {},
+		select() {},
 		classList: {
 			add() {}, remove() {}, toggle() {}, contains() { return false; },
 		},
@@ -85,6 +90,10 @@ function bootWorld(seedHex) {
 	sandbox.removeEventListener = function () {};
 	sandbox.innerWidth = 800;
 	sandbox.innerHeight = 800;
+	sandbox.btoa = btoa;
+	sandbox.atob = atob;
+	sandbox.Uint8Array = Uint8Array;
+	sandbox.navigator = {};
 	sandbox.window = sandbox;
 	sandbox.self = sandbox;
 	vm.createContext(sandbox);
@@ -189,8 +198,64 @@ assert(seen_titles.size >= 25, "title variety (" + seen_titles.size + ")");
 	}
 }
 
+// ---- mint kit: tune-code codec round trip, corruption, MIDI ---------------
+
+const CODEC_SEEDS = 40;
+for (let n = 0; n < CODEC_SEEDS; n++) {
+	const seed = randHex(rng);
+	const w = bootWorld(seed);
+	const tune = w.SPP.getTuneData();
+	const code = w.SPPMINT.encodeTune(tune);
+	assert(code.indexOf("SPP1.") === 0, "code has prefix");
+	const dec = w.SPPMINT.decodeTune(code);
+	assert(dec.ok, "decode ok " + seed.slice(0, 8) + (dec.ok ? "" : " (" + dec.error + ")"));
+	if (dec.ok) {
+		const d = dec.data;
+		assert(d.bpm === tune.bpm && d.swing === tune.swing, "codec bpm/swing round trip");
+		assert(d.root_i === tune.root_i && d.mode_i === tune.mode_i, "codec key round trip");
+		assert(d.title === tune.title, "codec title round trip");
+		assert(d.notes.length === tune.notes.length, "codec note count");
+		let exact = true;
+		for (let k = 0; k < d.notes.length; k++) {
+			const a = d.notes[k], b = tune.notes[k];
+			if (a.c !== b.c || a.r !== b.r || a.i !== b.i || Math.abs(a.v - b.v) > 0.0001) exact = false;
+		}
+		assert(exact, "codec notes exact round trip " + seed.slice(0, 8));
+		// import applies cleanly
+		assert(w.SPP.applyImportedTune(d) === true, "import applies");
+		assert(w.SPP.state.notes.length === d.notes.length, "import kept all notes");
+		assert(w.SPP.state.title === d.title && w.SPP.state.bpm === d.bpm, "import identity");
+		assert(w.SPP.state.pitches.length === 15 && w.SPP.state.midis.length === 15, "import rebuilt key tables");
+	}
+	// corruption detection: flip one payload char
+	const pos = 8 + Math.floor(rng() * (code.length - 9));
+	const flipped = code.slice(0, pos) + (code[pos] === "A" ? "B" : "A") + code.slice(pos + 1);
+	const bad = w.SPPMINT.decodeTune(flipped);
+	assert(!bad.ok, "corrupted code rejected");
+
+	// MIDI: valid SMF, deterministic
+	const midi1 = w.SPPMINT.buildMidiBytes(tune, w.SPP.state.midis, w.STAMPS, w.SPP.consts.SWING_AMTS);
+	const midi2 = w.SPPMINT.buildMidiBytes(tune, w.SPP.state.midis, w.STAMPS, w.SPP.consts.SWING_AMTS);
+	assert(String.fromCharCode(midi1[0], midi1[1], midi1[2], midi1[3]) === "MThd", "midi header");
+	const distinct = new Set(tune.notes.map((note) => note.i)).size;
+	const ntrks = (midi1[10] << 8) | midi1[11];
+	assert(ntrks === distinct + 1, "midi track count " + ntrks + " vs stamps " + distinct);
+	assert(midi1.length > 100, "midi non-trivial");
+	assert(midi1.length === midi2.length && midi1.every((b, i2) => b === midi2[i2]), "midi deterministic");
+}
+
+// garbage inputs never throw
+{
+	const w = bootWorld(randHex(rng));
+	["", "hello", "SPP1.", "SPP1.!!!!", "SPP2.AAAA", "SPP1." + "A".repeat(400)].forEach((junk) => {
+		const r = w.SPPMINT.decodeTune(junk);
+		assert(r && r.ok === false, "junk rejected: " + JSON.stringify(junk.slice(0, 12)));
+	});
+}
+
 console.log("");
 console.log("seeds tested:  " + N_SEEDS);
+console.log("codec seeds:   " + CODEC_SEEDS);
 console.log("checks run:    " + checks);
 console.log("distinct tunes: " + seen_tunes.size + "  titles: " + seen_titles.size);
 console.log("avg notes/tune: " + (total_notes / N_SEEDS).toFixed(1));

@@ -101,10 +101,22 @@ body::-webkit-scrollbar {
 	background: #e9ffe9;
 }
 
+.header_button:active {
+	border-style: inset;
+}
+
+/* pressed toggles: solid green, inset bevel, and NO white text-shadow -
+   the inherited shadow made white-on-green labels an unreadable smear */
 .header_button[aria-pressed="true"] {
-	background: green;
-	color: white;
-	border: 4px inset rgb(236, 236, 236);
+	background: #0b7a0b;
+	color: #ffffff;
+	border: 4px inset #8fd48f;
+	text-shadow: 1px 1px 0 #063f06;
+}
+
+.header_button[aria-pressed="true"]:hover,
+.header_button[aria-pressed="true"]:focus-visible {
+	background: #096409;
 }
 
 /* TRACK INFO */
@@ -286,6 +298,94 @@ input.hidden_radio:checked + .stamp_box {
 	background-color: #e9ffe9;
 }
 
+/* MINT & SHARE DIALOG (PEPEPAINT submission-dialog idiom) */
+.mint_dialog {
+	font-size: 1em;
+	position: absolute;
+	inset: 0 auto auto 0;
+	margin: 0;
+	width: 400px;
+	height: 560px;
+	background: #ffffff;
+	color: green;
+	padding: 22px 24px;
+	overflow: hidden;
+	z-index: 99999;
+	border: none;
+}
+
+.mint_dialog::backdrop {
+	background: none;
+}
+
+.mint_form {
+	display: flex;
+	flex-flow: column nowrap;
+	gap: 7px;
+	border: 1px solid green;
+	padding: 12px 14px;
+	height: 100%;
+}
+
+.mint_form_header {
+	display: flex;
+	flex-flow: row nowrap;
+	justify-content: space-between;
+	align-items: center;
+}
+
+#mint_title {
+	font-family: "unscii8", monospace;
+	font-size: 1.05em;
+}
+
+.mint_step {
+	font-family: "unscii8", monospace;
+	font-size: 0.78em;
+	margin-top: 4px;
+	border-bottom: 1px solid #b8ddb8;
+	padding-bottom: 2px;
+}
+
+.mint_row {
+	display: flex;
+	flex-flow: row wrap;
+	align-items: center;
+	gap: 2px;
+}
+
+.mint_info,
+.mint_hint {
+	font-size: 0.72em;
+	line-height: 1.5;
+}
+
+.mint_status {
+	font-size: 0.8em;
+	min-height: 18px;
+}
+
+.mint_status.warning {
+	color: #b00000;
+}
+
+#code_area {
+	width: 100%;
+	font-size: 0.72em;
+	background: #ffffff;
+	color: green;
+	border: 1px solid green;
+	padding: 3px;
+	resize: none;
+	word-break: break-all;
+	text-shadow: none;
+}
+
+a.header_button {
+	display: inline-block;
+	line-height: 18px;
+}
+
 /* FOOTER HINT */
 #footer_bar {
 	position: absolute;
@@ -337,7 +437,7 @@ input.hidden_radio:checked + .stamp_box {
 	transition:
 		opacity 0.2s ease,
 		transform 0.2s ease;
-	z-index: 50;
+	z-index: 9999999; /* above the mint dialog */
 }
 
 #feedback_dialog.visible {

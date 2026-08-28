@@ -50,6 +50,9 @@
 		title: "",
 		meta_line: "",
 		pitches: [], // freq per row (0 = top = highest)
+		midis: [], // midi note per row
+		root_i: 0,
+		mode_i: 0,
 		features: {},
 	};
 
@@ -143,15 +146,18 @@
 	const TITLE_A = ["SWAMP", "MIDNIGHT", "COMFY", "RARE", "COSMIC", "FEELS", "BASED", "GIGA", "SMUG", "NEON", "BOG", "HONK"];
 	const TITLE_B = ["CROAK", "GONDOLA", "RIBBIT", "FROGSONG", "POND", "LILY", "STONK", "HOPIUM", "MEMEWAVE", "SUNSET", "MARSH", "KEK"];
 
-	function buildPitches(root_semi, ivals) {
+	function scaleMidis(root_semi, ivals) {
 		// scale index k: 0 = root near C4, rising two octaves. row = 14 - k.
 		const root_midi = 60 + root_semi - (root_semi > 7 ? 12 : 0);
-		const p = new Array(ROWS);
+		const m = new Array(ROWS);
 		for (let k = 0; k < ROWS; k++) {
-			const midi = root_midi + 12 * Math.floor(k / 7) + ivals[k % 7];
-			p[14 - k] = 440 * Math.pow(2, (midi - 69) / 12);
+			m[14 - k] = root_midi + 12 * Math.floor(k / 7) + ivals[k % 7];
 		}
-		return p;
+		return m;
+	}
+
+	function buildPitches(root_semi, ivals) {
+		return scaleMidis(root_semi, ivals).map((midi) => 440 * Math.pow(2, (midi - 69) / 12));
 	}
 
 	function rowOfScaleIndex(k) {
@@ -162,8 +168,11 @@
 		const pick = (a) => a[Math.floor(rnd() * a.length)];
 		const ri = (n) => Math.floor(rnd() * n);
 
-		const mode = pick(MODES);
-		const root = pick(ROOTS);
+		// index picks consume rnd() exactly like pick() did - seed determinism frozen
+		const mode_i = Math.floor(rnd() * MODES.length);
+		const mode = MODES[mode_i];
+		const root_i = Math.floor(rnd() * ROOTS.length);
+		const root = ROOTS[root_i];
 		const bpm = 96 + 4 * ri(19); // 96..168
 		const swing = pick([0, 0, 0, 1, 1, 2]);
 		const prog_major = [[0, 5, 3, 4], [0, 3, 5, 4], [0, 4, 5, 3], [0, 5, 1, 4], [3, 4, 0, 4], [0, 3, 0, 4]];
@@ -268,8 +277,53 @@
 			title: title,
 			meta_line: root[0] + " " + mode.name + " · " + bpm + " BPM",
 			pitches: buildPitches(root[1], mode.iv),
+			midis: scaleMidis(root[1], mode.iv),
+			root_i: root_i,
+			mode_i: mode_i,
 			features: features,
 		};
+	}
+
+	function applyGenerated(gen) {
+		state.notes = gen.notes;
+		state.bpm = gen.bpm;
+		state.swing = gen.swing;
+		state.title = gen.title;
+		state.meta_line = gen.meta_line;
+		state.pitches = gen.pitches;
+		state.midis = gen.midis;
+		state.root_i = gen.root_i;
+		state.mode_i = gen.mode_i;
+		track_title.textContent = gen.title;
+		track_meta.textContent = gen.meta_line;
+	}
+
+	// load a decoded tune-code: {notes, bpm, swing, root_i, mode_i, title}
+	function applyImportedTune(data) {
+		if (!data || !Array.isArray(data.notes)) return false;
+		const mode = MODES[data.mode_i];
+		const root = ROOTS[data.root_i];
+		if (!mode || !root) return false;
+		pushUndo();
+		const clean = [];
+		for (let k = 0; k < data.notes.length; k++) {
+			const note = data.notes[k];
+			addNote(clean, note.c, note.r, note.i, note.v);
+		}
+		state.notes = clean;
+		state.bpm = Math.max(60, Math.min(220, Math.round(data.bpm) || 120));
+		state.swing = data.swing === 1 || data.swing === 2 ? data.swing : 0;
+		state.root_i = data.root_i;
+		state.mode_i = data.mode_i;
+		state.pitches = buildPitches(root[1], mode.iv);
+		state.midis = scaleMidis(root[1], mode.iv);
+		if (typeof data.title === "string" && data.title.length) state.title = data.title.slice(0, 24);
+		state.meta_line = root[0] + " " + mode.name + " · " + state.bpm + " BPM";
+		track_title.textContent = state.title;
+		track_meta.textContent = state.meta_line;
+		syncTransportUI();
+		saveLocal();
+		return true;
 	}
 
 	////////////////////
@@ -380,7 +434,7 @@
 		}
 
 		// hover ghost
-		if (!opts.static_render && hover_cell && hover_cell.c >= page * PAGE_COLS && hover_cell.c < (page + 1) * PAGE_COLS) {
+		if (!opts.static_render && !opts.no_hover && hover_cell && hover_cell.c >= page * PAGE_COLS && hover_cell.c < (page + 1) * PAGE_COLS) {
 			const rect = cellRect(hover_cell.c - page * PAGE_COLS, hover_cell.r);
 			if (state.eraser) {
 				g.strokeStyle = "#cc4444";
@@ -445,6 +499,9 @@
 		next_time: 0,
 		timer: null,
 		ending: false,
+		steps_done: 0,
+		passes_target: null, // when set, play exactly N passes then stop
+		on_complete: null, // callback("complete" | "stopped")
 	};
 
 	function stepDur() {
@@ -476,19 +533,25 @@
 		while (player.next_time < c.currentTime + 0.14) {
 			if (player.ending) break;
 			scheduleStep(player.step, player.next_time);
+			player.steps_done++;
 			player.step++;
 			if (player.step >= COLS) {
-				if (state.loop) player.step = 0;
-				else player.ending = true;
+				const passes_done = player.passes_target !== null && player.steps_done >= COLS * player.passes_target;
+				if (passes_done || (player.passes_target === null && !state.loop)) {
+					player.ending = true;
+				} else {
+					player.step = 0;
+				}
 			}
 			player.next_time += sd;
 		}
 		if (player.ending && c.currentTime > player.next_time + 0.2) {
-			stopPlayback();
+			stopPlayback("complete");
 		}
 	}
 
-	function startPlayback() {
+	function startPlayback(opts) {
+		opts = opts || {};
 		const c = SPPAudio.ctx();
 		if (c.state === "suspended") {
 			c.resume();
@@ -496,6 +559,9 @@
 		player.playing = true;
 		player.ending = false;
 		player.step = 0;
+		player.steps_done = 0;
+		player.passes_target = opts.passes || null;
+		player.on_complete = opts.onComplete || null;
 		player.next_time = c.currentTime + 0.08;
 		playhead_queue.length = 0;
 		playhead.step = -1;
@@ -503,12 +569,15 @@
 		schedulerTick();
 		play_button.innerHTML = "&#9632; STOP";
 		play_button.setAttribute("aria-pressed", "true");
-		showFeedbackNotification("RIBBIT");
+		if (!opts.quiet) showFeedbackNotification("RIBBIT");
 	}
 
-	function stopPlayback() {
+	function stopPlayback(reason) {
+		const cb = player.on_complete;
 		player.playing = false;
 		player.ending = false;
+		player.passes_target = null;
+		player.on_complete = null;
 		if (player.timer !== null) {
 			clearInterval(player.timer);
 			player.timer = null;
@@ -517,6 +586,7 @@
 		playhead.step = -1;
 		play_button.innerHTML = "&#9654; PLAY";
 		play_button.setAttribute("aria-pressed", "false");
+		if (cb) cb(reason === "complete" ? "complete" : "stopped");
 	}
 
 	function togglePlayback() {
@@ -555,7 +625,20 @@
 	////////////////////
 
 	function snapshot() {
-		return JSON.stringify({ n: state.notes, b: state.bpm, s: state.swing });
+		return JSON.stringify({ n: state.notes, b: state.bpm, s: state.swing, ri: state.root_i, mi: state.mode_i, t: state.title });
+	}
+
+	function applyKeySignature(root_i, mode_i) {
+		const mode = MODES[mode_i];
+		const root = ROOTS[root_i];
+		if (!mode || !root) return;
+		state.root_i = root_i;
+		state.mode_i = mode_i;
+		state.pitches = buildPitches(root[1], mode.iv);
+		state.midis = scaleMidis(root[1], mode.iv);
+		state.meta_line = root[0] + " " + mode.name + " · " + state.bpm + " BPM";
+		track_title.textContent = state.title;
+		track_meta.textContent = state.meta_line;
 	}
 
 	function pushUndo() {
@@ -570,6 +653,8 @@
 			state.notes = data.n || [];
 			state.bpm = data.b || state.bpm;
 			state.swing = data.s !== undefined ? data.s : state.swing;
+			if (typeof data.t === "string" && data.t.length) state.title = data.t;
+			if (data.ri !== undefined && data.mi !== undefined) applyKeySignature(data.ri, data.mi);
 			syncTransportUI();
 		} catch (err) { /* keep current state */ }
 	}
@@ -627,6 +712,8 @@
 			state.notes = clean;
 			if (typeof data.b === "number" && data.b >= 60 && data.b <= 220) state.bpm = data.b;
 			if (data.s === 0 || data.s === 1 || data.s === 2) state.swing = data.s;
+			if (typeof data.t === "string" && data.t.length) state.title = data.t.slice(0, 24);
+			if (data.ri !== undefined && data.mi !== undefined) applyKeySignature(data.ri, data.mi);
 			return true;
 		} catch (err) {
 			return false;
@@ -714,9 +801,11 @@
 		tempo_range.value = String(state.bpm);
 		bpm_readout.textContent = String(state.bpm);
 		swing_button.setAttribute("aria-pressed", state.swing > 0 ? "true" : "false");
-		swing_button.textContent = state.swing === 0 ? "SWING" : "SWING·" + (state.swing === 1 ? "L" : "H");
+		swing_button.textContent = (state.swing > 0 ? "●" : "○") + "SWING" + (state.swing === 0 ? "" : "·" + (state.swing === 1 ? "L" : "H"));
 		loop_button.setAttribute("aria-pressed", state.loop ? "true" : "false");
+		loop_button.textContent = (state.loop ? "●" : "○") + "LOOP";
 		eraser_button.setAttribute("aria-pressed", state.eraser ? "true" : "false");
+		eraser_button.textContent = (state.eraser ? "●" : "○") + "ERASE";
 		updatePageButton();
 	}
 
@@ -758,14 +847,7 @@
 	function randomTune() {
 		pushUndo();
 		const gen = generate(BL.rnd);
-		state.notes = gen.notes;
-		state.bpm = gen.bpm;
-		state.swing = gen.swing;
-		state.title = gen.title;
-		state.meta_line = gen.meta_line;
-		state.pitches = gen.pitches;
-		track_title.textContent = gen.title;
-		track_meta.textContent = gen.meta_line;
+		applyGenerated(gen);
 		syncTransportUI();
 		saveLocal();
 		showFeedbackNotification("NEW TUNE: " + gen.title);
@@ -923,6 +1005,9 @@
 
 	document.addEventListener("keydown", (ev) => {
 		if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+		// never hijack typing in form fields (tune-code textarea etc.)
+		const tag = ev.target && ev.target.tagName;
+		if (tag === "TEXTAREA" || tag === "INPUT" || tag === "SELECT") return;
 		const key = ev.key;
 		// stamp keys
 		for (let i = 0; i < STAMPS.length; i++) {
@@ -991,15 +1076,8 @@
 
 		// the seed composes. same hash, same tune, forever.
 		const gen = generate(BL.rnd);
-		state.notes = gen.notes;
-		state.bpm = gen.bpm;
-		state.swing = gen.swing;
-		state.title = gen.title;
-		state.meta_line = gen.meta_line;
-		state.pitches = gen.pitches;
+		applyGenerated(gen);
 		state.features = gen.features;
-		track_title.textContent = gen.title;
-		track_meta.textContent = gen.meta_line;
 		$("info_token_row").textContent = "SEED " + BL.hash.slice(0, 12) + "... · EDITION #" + BL.iteration;
 		BL.setFeatures(gen.features);
 
@@ -1028,14 +1106,41 @@
 
 	init();
 
-	// small window for tinkerers, dev harness and tests
+	// small window for tinkerers, dev harness, tests and the mint kit
 	window.SPP = {
 		state: state,
 		generate: generate,
 		draw: draw,
 		addNote: addNote,
 		togglePlayback: togglePlayback,
+		startPlayback: startPlayback,
+		stopPlayback: stopPlayback,
+		isPlaying: () => player.playing,
+		playheadStep: () => playhead.step,
+		stepDur: stepDur,
 		exportWav: exportWav,
 		exportPng: exportPng,
+		drawStaffInto: drawStaffInto,
+		getTuneData: () => ({
+			notes: state.notes.map((n) => ({ c: n.c, r: n.r, i: n.i, v: n.v })),
+			bpm: state.bpm,
+			swing: state.swing,
+			root_i: state.root_i,
+			mode_i: state.mode_i,
+			title: state.title,
+		}),
+		applyImportedTune: applyImportedTune,
+		downloadBlob: downloadBlob,
+		fileTag: fileTag,
+		showFeedback: showFeedbackNotification,
+		images: stamp_imgs,
+		consts: {
+			COLS: COLS,
+			ROWS: ROWS,
+			MODES: MODES,
+			ROOTS: ROOTS,
+			SWING_AMTS: SWING_AMTS,
+			SWING_NAMES: SWING_NAMES,
+		},
 	};
 })();

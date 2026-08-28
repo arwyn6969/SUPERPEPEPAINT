@@ -1,10 +1,10 @@
 {
 	"name": "superpepepaint",
-	"version": "1.0.0",
+	"version": "1.1.0",
 	"description": "Mario Paint style music composer forked from PEPEPAINT V1, packaged for the bootloader.art generic-web runtime",
 	"license": "MIT",
 	"scripts": {
 		"test": "node test/logic.test.cjs",
-		"zip": "mkdir -p dist && rm -f dist/superpepepaint.zip && zip -j dist/superpepepaint.zip index.html bootloader.js manifest.json styles.css stamps.js audio.js main.js LICENSE"
+		"zip": "mkdir -p dist && rm -f dist/superpepepaint.zip && zip -j dist/superpepepaint.zip index.html bootloader.js manifest.json styles.css stamps.js audio.js main.js mint.js LICENSE"
 	}
 }

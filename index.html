@@ -16,8 +16,7 @@
 				<div id="header_title">SUPERPEPEPAINT</div>
 				<div id="header_buttons">
 					<button type="button" class="header_button" id="play_button" title="Play / stop (space)">&#9654; PLAY</button>
-					<button type="button" class="header_button" id="wav_button" title="Export WAV (v)">WAV</button>
-					<button type="button" class="header_button" id="png_button" title="Export score PNG (s)">PNG</button>
+					<button type="button" class="header_button" id="mint_button" title="Mint &amp; share kit (d)">MINT</button>
 					<button type="button" class="header_button" id="help_button" title="Help (?)">?</button>
 				</div>
 			</div>
@@ -77,10 +76,54 @@
 				<div class="info_row">g = swing &nbsp; l = loop</div>
 				<div class="info_row">left/right = page A/B</div>
 				<div class="info_row">s = save score PNG &nbsp; v = save WAV</div>
+				<div class="info_row">d = mint &amp; share (video/midi/tune code)</div>
 				<div class="info_row">h = hide controls &nbsp; ? = this panel</div>
 				<div class="info_row">&nbsp;</div>
 				<div class="info_row" id="info_token_row"></div>
 			</div>
+
+			<!-- MINT & SHARE DIALOG -->
+			<dialog id="mint_dialog" class="mint_dialog">
+				<div class="mint_form">
+					<div class="mint_form_header">
+						<div id="mint_title">MINT &amp; SHARE</div>
+						<button type="button" class="header_button" id="mint_close_button" aria-label="Close mint window">x</button>
+					</div>
+
+					<div class="mint_step">1. RECORD YOUR TUNE (VIDEO + SOUND)</div>
+					<div class="mint_row">
+						<button type="button" class="header_button" id="record_button">&#9679; REC VIDEO</button>
+						<button type="button" class="header_button hidden" id="record_cancel_button">CANCEL</button>
+						<span id="record_status" class="mint_hint"></span>
+					</div>
+
+					<div class="mint_step">2. SAVE THE MINT FILES</div>
+					<div class="mint_row">
+						<button type="button" class="header_button" id="png_button" title="Score card, use as cover image (s)">COVER PNG</button>
+						<button type="button" class="header_button" id="meta_button" title="Title, traits and tune code as JSON">METADATA</button>
+						<button type="button" class="header_button" id="wav_button" title="Audio only (v)">WAV</button>
+						<button type="button" class="header_button" id="midi_button" title="Notes for your DAW">MIDI</button>
+					</div>
+
+					<div class="mint_step">3. MINT ON OBJKT.COM (TEZOS WALLET)</div>
+					<div class="mint_info">
+						CREATE &#8594; PICK A COLLECTION &#8594; UPLOAD THE VIDEO AS ARTEFACT + COVER PNG &#8594; PASTE TITLE, TUNE CODE
+						AND ATTRIBUTES FROM METADATA &#8594; SET EDITIONS + ROYALTIES &#8594; MINT
+					</div>
+					<div class="mint_row">
+						<a class="header_button" id="objkt_link" href="https://objkt.com/create" target="_blank" rel="noopener noreferrer">OPEN OBJKT.COM &#8599;</a>
+						<span class="mint_hint">IF BLOCKED: VISIT OBJKT.COM &#8594; CREATE</span>
+					</div>
+
+					<div class="mint_step">TUNE CODE &#183; YOUR COMPOSITION AS TEXT</div>
+					<textarea id="code_area" rows="3" spellcheck="false" autocomplete="off"></textarea>
+					<div class="mint_row">
+						<button type="button" class="header_button" id="code_copy_button">COPY CODE</button>
+						<button type="button" class="header_button" id="code_import_button">IMPORT CODE</button>
+					</div>
+					<div id="mint_status" class="mint_status" role="status" aria-live="polite">&nbsp;</div>
+				</div>
+			</dialog>
 
 			<!-- FEEDBACK POPUP -->
 			<div id="feedback_dialog" role="status" aria-live="polite">
@@ -92,4 +135,5 @@
 	<script src="stamps.js"></script>
 	<script src="audio.js"></script>
 	<script src="main.js"></script>
+	<script src="mint.js"></script>
 </html>

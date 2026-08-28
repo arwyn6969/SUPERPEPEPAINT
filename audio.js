@@ -421,11 +421,35 @@ var SPPAudio = (function () {
 		return new Blob([ab], { type: "audio/wav" });
 	}
 
+	// tap the live bus into a MediaStream (for video recording) without
+	// disturbing what the speakers hear. returns { stream, disconnect }.
+	function tapRecordStream() {
+		const c = ctx();
+		const dest = c.createMediaStreamDestination();
+		const comp = c.createDynamicsCompressor();
+		comp.threshold.value = -14;
+		comp.knee.value = 22;
+		comp.ratio.value = 5;
+		comp.attack.value = 0.003;
+		comp.release.value = 0.24;
+		live_bus.connect(comp);
+		comp.connect(dest);
+		return {
+			stream: dest.stream,
+			disconnect: function () {
+				try {
+					live_bus.disconnect(comp);
+				} catch (err) { /* already gone */ }
+			},
+		};
+	}
+
 	return {
 		ctx: ctx,
 		bus: bus,
 		playNote: playNote,
 		panFor: panFor,
 		renderWav: renderWav,
+		tapRecordStream: tapRecordStream,
 	};
 })();
