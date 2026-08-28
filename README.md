@@ -1,173 +1,78 @@
-# PEPEPAINT V1
+# SUPERPEPEPAINT
 
-PEPEPAINT is a browser drawing app for creating Pepe-themed artwork. The frontend is plain HTML, CSS, and JavaScript with no build step. A small Node.js service handles artwork submissions.
+SUPERPEPEPAINT is a Mario Paint style music composer wearing PEPEPAINT's skin. Place meme stamps on a musical staff; every stamp is a synthesized instrument. It ships as a fully self-contained web artwork for the [bootloader.art](https://bootloader.art) generic-web runtime (`boot:web@1.0.0`): the token seed composes a deterministic starter tune, and the collector takes it from there.
 
-Live site: <https://pepepaint.journeypaint.fun>
+A fork of [PEPEPAINT V1](https://github.com/nathansonic/PEPEPAINT-V1) by Nathan Gregg (MIT). The unscii fonts, the green-on-white text-shadow chrome, the beveled buttons, the feedback popup, and all sixteen stamp sprites are inherited from PEPEPAINT's visual system in honored continuity — the drawing canvas just grew staff lines.
 
-## Features
+## What it does
 
-- Image-based brushes and custom fonts
-- Adjustable brush size and opacity
-- Keyboard-controlled effects, filters, transforms, and randomisation
-- Undo and redo
-- Canvas export
+- **16 instrument stamps**, each a Web Audio synth voice: PEPE (square croak), CAT (meow bend), GONDOLA (comfy flute), HEART (FM bell), DOGE (FM bark), SANIC (octave zap), UFO (theremin), WOJAK (sad detune), CHEEMS (wobble saw), GROYPER (hollow pluck), SWOLE (brass stack), NPC (flat robot pulse), SMINEM (deep bass), XCP (kick), SUN (hi-hat), FIREDOG (snare). No samples — every sound is synthesized, so nothing external is ever fetched.
+- **Mario Paint rules**: 2 pages × 16 eighth-note steps (4 bars), 15 diatonic staff rows, **max 3 stamps per beat**, stamps wiggle when the playhead hits them, placing a stamp previews its note.
+- **Seeded starter tune**: `$bootloader.rnd()` picks mode, key, tempo, swing, progression, lead/bass/drums and composes a 4-bar loop plus a title ("SWAMP KEK", "MIDNIGHT RIBBIT", ...). Same seed, same tune, forever.
+- **Token features** via `$bootloader.setFeatures()`: Tempo, Key, Mood, Lead, Bass, Drums, Swing, Croakage (%), Stamps (num), Motif.
+- **Exports**: 2-loop stereo WAV (OfflineAudioContext render) and a 2-page score card PNG.
+- **Persistence**: compositions autosave to localStorage per token hash (never during capture, so thumbnails stay deterministic).
+
+## Controls
+
+| Key | Action |
+| --- | --- |
+| click / drag staff | place selected stamp (3 per beat max) |
+| space | play / stop |
+| 1-8, 9 0 q w r t y u | select stamp |
+| e | eraser |
+| z / x | undo / redo |
+| a | new random tune |
+| c | clear |
+| n / m | tempo down / up |
+| g | swing (straight / light / heavy) |
+| l | loop on / off |
+| left / right | page A / B |
+| s | save score PNG |
+| v | save WAV |
+| h | hide controls |
+| ? | help panel |
 
 ## Run locally
 
-The project is static, so it can be served by any local HTTP server. From the project root, for example:
+The app is static with no build step:
 
 ```sh
 python3 -m http.server 8000
 ```
 
-Then open <http://localhost:8000>.
+Open <http://localhost:8000>. `bootloader.js` self-seeds when no query parameters are given; control it with `?s=<64-hex-seed>&i=<edition>&c=true` (capture mode). Open <http://localhost:8000/dev.html> for a six-seed preview lab.
 
-You can also use an editor-provided static server. No package installation or build command is required.
+## Publish to bootloader.art
 
-## Project structure
-
-```text
-index.html   UI layout and controls
-styles.css  Application styling
-main.js     Drawing logic, brushes, canvas pipeline, and events
-filters.js  Image and canvas filters
-traits.js   Artwork trait calculations
-brushes/    Brush image assets
-fonts/      Custom font assets
-backend/    Submission API, email delivery, archive, and deployment examples
-```
-
-## Development workflow
-
-1. Create a branch from `main`.
-2. Make and test changes locally.
-3. Commit the changes and push the branch to GitHub.
-4. Open a pull request for review before merging into `main`.
-
-For a small change made directly on `main`:
-
-```sh
-git add .
-git commit -m "Describe the change"
-git push
-```
-
-There are currently no automated tests. Manually verify brush previews, drawing behaviour, keyboard controls, filters, undo/redo, and image export in a browser.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for more detail and [AGENTS.md](AGENTS.md) for project-specific coding guidance.
-
-## Production deployment
-
-Production is hosted at <https://pepepaint.journeypaint.fun> on the same VPS as JourneyPaint, but uses an isolated deployment user, web directory, Nginx site, and TLS certificate.
-
-Every push to `main` triggers the [Deploy PEPEPAINT workflow](.github/workflows/deploy.yml). The workflow:
-
-1. Checks out the committed `main` branch.
-2. Authenticates to the VPS with a dedicated deployment key stored as a GitHub Actions secret.
-3. Synchronises the frontend files to `/var/www/pepepaint/current`.
-4. Synchronises the backend runtime files to `/var/www/pepepaint/backend` without touching its environment or archive.
-5. Installs locked production dependencies and restarts `pepepaint-submissions.service` through a narrowly scoped sudo rule.
-6. Verifies the website, `traits.js`, and the public API health endpoint.
-
-The workflow deploys these frontend files:
+The published artifact is a zip of exactly these files:
 
 ```text
-index.html
-main.js
-filters.js
-traits.js
-styles.css
-greenpaper/
-brushes/
-fonts/
+index.html      entry (required name)
+bootloader.js   the boot:web@1.0.0 runtime (verbatim from the official examples)
+manifest.json   trigger capture, 1000x1000 viewport
+styles.css      PEPEPAINT chrome, subset unscii fonts inlined as woff2 data URIs
+stamps.js       16 stamp sprites as PNG data URIs + eraser icon
+audio.js        synth voices, scheduler helpers, WAV encoder
+main.js         composer, staff renderer, interaction, bootloader wiring
+LICENSE         MIT, original + fork
 ```
 
-Repository documentation, Git metadata, workflow files, and local environment files are not deployed.
-
-Deployment runs and logs are available in the repository's **Actions** tab. A successful Git push does not by itself prove that deployment succeeded, so check the latest workflow run after production changes.
-
-### Manual deployment
-
-The workflow can also be started from GitHub:
-
-1. Open **Actions**.
-2. Select **Deploy PEPEPAINT**.
-3. Choose **Run workflow** on the `main` branch.
-
-### Rollback
-
-To undo a deployed change without rewriting Git history:
+Build it:
 
 ```sh
-git log --oneline
-git revert <commit-hash>
-git push
+npm run zip     # or: zip -j dist/superpepepaint.zip index.html bootloader.js manifest.json styles.css stamps.js audio.js main.js LICENSE
 ```
 
-The revert commit triggers a new deployment. If deployment fails, investigate the failed Actions run before making unrelated changes.
+Then on [bootloader.art/create](https://bootloader.art/create) choose **Generic Web**, upload the zip, preview a few seeds, pick a thumbnail seed, and publish. The project follows the generic-web rules: all randomness flows from `$bootloader.rnd()`, every asset is bundled (data URIs — no external requests anywhere), the card scales to any viewport, `$bootloader.capture()` fires in capture mode after fonts and sprites are ready.
 
-### Deployment security
+## Repository layout
 
-- Never commit deployment keys, `.env` files, API tokens, or passwords.
-- The `PEPEPAINT_DEPLOY_KEY` secret must contain only the dedicated PEPEPAINT deployment key.
-- If that key is exposed, replace the GitHub secret and remove the corresponding public key from the VPS.
-- Changes to Nginx, DNS, certificates, users, or server permissions are not managed by the deployment workflow and require deliberate server administration.
+Beyond the artifact files above: `dev.html` (seed lab), `test/logic.test.cjs` (`node test/logic.test.cjs` — boots the real `bootloader.js` + `main.js` in a stub DOM and checks determinism and composer invariants across 120 seeds), and the inherited `brushes/` + `fonts/` directories from upstream PEPEPAINT, which are the source art the stamp sprites and subset fonts were derived from. Upstream's drawing-app files (`filters.js`, `traits.js`, `backend/`, `greenpaper/`) are not used by SUPERPEPEPAINT.
 
-## Submission backend
+## Credits & license
 
-The frontend sends `multipart/form-data` to `POST /api/submissions`. A submission contains the title, description, editions, Tezos wallet address, selected trait values, and either a PNG or GIF. Animated artwork is submitted as GIF; other artwork is submitted as PNG. Submission GIFs use at most 32 evenly spaced frames, with their delay adjusted to preserve the animation cycle while remaining safely within email attachment limits. Downloaded GIFs retain their full export frame count.
-
-The backend validates the request, saves `artwork.png` or `artwork.gif` alongside `submission.json`, and then sends the artwork and submission details through each configured delivery service. Resend email and a private Telegram channel are supported. It uses the browser-generated submission UUID, archived delivery state, and Resend idempotency header to avoid repeat delivery after a retry. Submission never clears the canvas or its IndexedDB save; only the form fields reset after a successful response.
-
-Only these trait values are submitted and archived:
-
-- Croakage: `value`
-- RSi: `value`
-- Quietus elapsed time: `formatted`
-- Quietus: percentage of 100 years
-- Wanderlust: `value`
-- Chaos: `value`
-- Brushiness: `value`
-
-### Run the backend locally
-
-Requires Node.js 20.6 or newer.
-
-```sh
-cd backend
-npm ci
-cp .env.example .env
-```
-
-Set either the Resend variables, the Telegram variables, or both, then run:
-
-```sh
-npm start
-```
-
-The service listens on `127.0.0.1:3101` by default and also serves the frontend for local testing. Run backend tests with `npm test`.
-
-### Production setup
-
-Keep the API isolated from JourneyPaint with its own process, private localhost port, environment file, logs, archive directory, and Nginx `/api` route. Do not put the Resend API key or destination email in browser JavaScript.
-
-Example systemd and Nginx configurations are in `backend/deploy/`. The production environment should set:
-
-```text
-PORT=3101
-APP_ENV=production
-RESEND_API_KEY=...
-SUBMISSION_FROM_EMAIL=PEPEPAINT <submissions@pepepaint.journeypaint.fun>
-SUBMISSION_TO_EMAIL=your-private-address@example.com
-TELEGRAM_BOT_TOKEN=...
-TELEGRAM_CHAT_ID=-1001234567890
-SUBMISSION_STORAGE_ROOT=/var/lib/pepepaint/submissions
-```
-
-The workflow deploys the backend runtime and restarts its service, but does not deploy secrets, server configuration, tests, or archived submissions. Do not place the backend archive beneath the public Nginx document root.
-
-## License and bundled assets
-
-The project source code is available under the [MIT License](LICENSE).
-
-The `fonts/` and `brushes/` directories include bundled third-party or derivative assets that may be subject to separate copyright, trademark, or font-license terms. Their inclusion in this repository does not grant rights beyond those provided by their respective owners. Contributors should verify asset rights before adding or reusing bundled assets, particularly for commercial use.
+- [PEPEPAINT V1](https://github.com/nathansonic/PEPEPAINT-V1) by Nathan Gregg — MIT. Art, fonts, visual system.
+- [unscii](http://viznut.fi/unscii/) bitmap font by viznut (in PEPEPAINT upstream), subset here to ASCII + symbols.
+- [bootloader.art](https://bootloader.art) — open-source generative art platform on Tezos by objkt.
+- SUPERPEPEPAINT fork — MIT, same terms as upstream. See `LICENSE`.

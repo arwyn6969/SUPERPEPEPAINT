@@ -18,10 +18,12 @@
 *.tmp
 tmp/
 
-# Node.js dependencies and output (for the planned backend)
+# Node.js dependencies and output
 node_modules/
 coverage/
+
+# Built zip artifacts (rebuild with npm run zip)
 dist/
 
-# Local submission archive
+# Inherited from upstream PEPEPAINT backend
 backend/var/

@@ -3,175 +3,93 @@
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>PEPEPAINT</title>
-		<meta name="description" content="Create Pepe-themed artwork with PEPEPAINT, a browser-based drawing app." />
-		<link rel="canonical" href="https://pepepaint.journeypaint.fun/" />
-
-		<meta property="og:title" content="PEPEPAINT" />
-		<meta property="og:description" content="Create Pepe-themed artwork with PEPEPAINT, a browser-based drawing app." />
-		<meta property="og:type" content="website" />
-		<meta property="og:url" content="https://pepepaint.journeypaint.fun/" />
-		<meta property="og:image" content="https://pepepaint.journeypaint.fun/favicon/pppfevc.png" />
-		<meta property="og:image:type" content="image/png" />
-		<meta property="og:image:width" content="800" />
-		<meta property="og:image:height" content="1120" />
-		<meta property="og:image:alt" content="PEPEPAINT preview artwork" />
-
-		<meta name="twitter:card" content="summary_large_image" />
-		<meta name="twitter:title" content="PEPEPAINT" />
-		<meta name="twitter:description" content="Create Pepe-themed artwork with PEPEPAINT, a browser-based drawing app." />
-		<meta name="twitter:image" content="https://pepepaint.journeypaint.fun/favicon/pppfevc.png" />
-		<meta name="twitter:image:alt" content="PEPEPAINT preview artwork" />
-		<link rel="icon" type="image/jpeg" href="favicon/IMG_2807.JPG" />
+		<title>SUPERPEPEPAINT</title>
+		<meta name="description" content="SUPERPEPEPAINT - a Mario Paint style music composer forked from PEPEPAINT. Place meme stamps on the staff, make swamp music." />
 		<link rel="stylesheet" href="styles.css" />
+		<script src="./bootloader.js"></script>
 	</head>
 
 	<body id="body">
 		<div id="card">
-			<!-- NAV -->
-			<div class="nav-container" id="nav_container">
-				<div id="header">
-					<div class="header_item" id="header_title">PEPEPAINT</div>
-					<!-- <div class="header_item controller" id="gallery_button">
-						<a href="https://objkt.com/users/tz1QQkaUxPXKdpkPYe4w999wF9Abggicdad5/created" target="_blank">gallery↗</a>
-					</div> -->
-					<button type="button" class="header_button controller" id="gallery_button">Gallery</button>
-					<button class="header_button controller" id="submission_button">Submit</button>
+			<!-- HEADER -->
+			<div id="header">
+				<div id="header_title">SUPERPEPEPAINT</div>
+				<div id="header_buttons">
+					<button type="button" class="header_button" id="play_button" title="Play / stop (space)">&#9654; PLAY</button>
+					<button type="button" class="header_button" id="wav_button" title="Export WAV (v)">WAV</button>
+					<button type="button" class="header_button" id="png_button" title="Export score PNG (s)">PNG</button>
+					<button type="button" class="header_button" id="help_button" title="Help (?)">?</button>
 				</div>
+			</div>
 
-				<div id="info-bar">
-					<div class="info-panel">
-						<div class="info_row">h = hide nav/controls</div>
-						<div class="info_row">1-9 = fx</div>
-						<div class="info_row">0 = all fx off</div>
-						<div class="info_row">q-p = filters</div>
-						<div class="info_row">j/k/l/; = animated filters</div>
-						<div class="info_row">a = randomise</div>
-						<div class="info_row">z/x = undo/redo</div>
-						<div class="info_row">s = save png/gif to disk</div>
-						<div class="info_row">n/m = size</div>
-						<div class="info_row">d/c = rotate</div>
-						<div class="info_row">f/v = hold</div>
-						<div class="info_row">g/b = flip</div>
-					</div>
-				</div>
+			<!-- TRACK INFO -->
+			<div id="track_bar">
+				<div id="track_title">...</div>
+				<div id="track_meta">...</div>
+			</div>
 
-				<div class="size-bar">
-					<!-- SIZE -->
-					<div class="menu_row">
-						<div class="menu_control_title">Size</div>
-						<div class="menu_range_input_container">
-							<input
-								name="brush_w"
-								id="brush_w_input_range"
-								type="range"
-								min="1"
-								max="560"
-								value="50"
-								class="controller brush_controller input_range slider_small"
-								data-type="brush_dim" />
-						</div>
-					</div>
+			<!-- STAFF -->
+			<div id="staff_wrap">
+				<canvas id="staff_canvas" width="1200" height="900"></canvas>
+			</div>
 
-					<!-- OPACITY -->
-					<div class="menu_row">
-						<div class="menu_control_title">Opacity</div>
-						<div class="menu_range_input_container">
-							<input
-								name="image_opacity"
-								id="image_opacity_input_range"
-								type="range"
-								min="0"
-								max="100"
-								value="100"
-								class="controller brush_controller input_range slider"
-								data-type="image"
-								data-controller="image_opacity" />
-						</div>
-					</div>
-				</div>
+			<!-- TRANSPORT -->
+			<div id="transport_bar">
+				<button type="button" class="header_button" id="loop_button" aria-pressed="true" title="Loop (l)">LOOP</button>
+				<button type="button" class="header_button" id="swing_button" aria-pressed="false" title="Swing (g)">SWING</button>
+				<div class="menu_control_title">TEMPO</div>
+				<input name="tempo" id="tempo_range" type="range" min="60" max="220" step="2" value="120" class="slider" />
+				<div id="bpm_readout">120</div>
+				<button type="button" class="header_button" id="page_prev_button" title="Page A (left arrow)">&#9664;</button>
+				<button type="button" class="header_button" id="page_button" title="Toggle page">PAGE A</button>
+				<button type="button" class="header_button" id="page_next_button" title="Page B (right arrow)">&#9654;</button>
+			</div>
 
-				<div class="palette-bar">
-					<!-- BRUSHES -->
-					<div class="palette_row">
-						<div class="paint_controls_section">
-							<div id="image_brush_controls" class="controls"></div>
-						</div>
-					</div>
-				</div>
+			<!-- TOOLS -->
+			<div id="tool_bar">
+				<button type="button" class="header_button" id="eraser_button" aria-pressed="false" title="Eraser (e)">ERASE</button>
+				<button type="button" class="header_button" id="undo_button" title="Undo (z)">UNDO</button>
+				<button type="button" class="header_button" id="redo_button" title="Redo (x)">REDO</button>
+				<button type="button" class="header_button" id="rand_button" title="Random tune (a)">RAND</button>
+				<button type="button" class="header_button" id="clear_button" title="Clear all (c)">CLEAR</button>
+			</div>
+
+			<!-- STAMP PALETTE -->
+			<div id="palette_bar"></div>
+
+			<!-- FOOTER -->
+			<div id="footer_bar">h = hide controls &nbsp; ? = help &nbsp; space = play</div>
+
+			<!-- HELP OVERLAY -->
+			<div id="info_overlay">
+				<div class="info_row_title">SUPERPEPEPAINT</div>
+				<div class="info_row">A MARIO PAINT STYLE MUSIC TOOL, FORKED FROM</div>
+				<div class="info_row">PEPEPAINT V1 BY NATHAN GREGG (MIT)</div>
+				<div class="info_row">&nbsp;</div>
+				<div class="info_row">CLICK/DRAG STAFF = PLACE STAMP (3 PER BEAT)</div>
+				<div class="info_row">CLICK WITH ERASE = REMOVE STAMP</div>
+				<div class="info_row">&nbsp;</div>
+				<div class="info_row">space = play/stop</div>
+				<div class="info_row">1-8, 9 0 q w r t y u = pick stamp</div>
+				<div class="info_row">e = eraser &nbsp; c = clear &nbsp; a = random tune</div>
+				<div class="info_row">z/x = undo/redo</div>
+				<div class="info_row">n/m = tempo down/up</div>
+				<div class="info_row">g = swing &nbsp; l = loop</div>
+				<div class="info_row">left/right = page A/B</div>
+				<div class="info_row">s = save score PNG &nbsp; v = save WAV</div>
+				<div class="info_row">h = hide controls &nbsp; ? = this panel</div>
+				<div class="info_row">&nbsp;</div>
+				<div class="info_row" id="info_token_row"></div>
 			</div>
 
 			<!-- FEEDBACK POPUP -->
 			<div id="feedback_dialog" role="status" aria-live="polite">
-				<div class="feedback-panel">
-					<div class="feedback_row" id="feedback_text"></div>
-				</div>
+				<div class="feedback_row" id="feedback_text"></div>
 			</div>
-
-			<!-- CANVASES -->
-			<div class="canvas-container" id="canvas_container">
-				<canvas id="draw_canvas" class="drawing_canvas" width="400" height="560"></canvas>
-				<canvas id="preview_canvas" width="400" height="560"></canvas>
-			</div>
-
-			<!-- SUBMISSIONS -->
-			<dialog id="submission_dialog" class="submission_dialog">
-				<form id="submission_form" class="submission_form" novalidate>
-					<div class="submission_form_header">
-						<div id="submission_title">Submissions</div>
-						<button type="button" class="header_button submission_close_button" id="submission_close_button" aria-label="Close submission window">
-							x
-						</button>
-					</div>
-					<div>
-						<label class="submission_field" id="submission_title_label">
-							<span>Title</span>
-							<input id="submission_title_input" name="title" type="text" maxlength="120" required />
-						</label>
-						<label class="submission_field" id="submission_description_label">
-							<span>Description</span>
-							<textarea id="submission_description_input" name="description" maxlength="1000" rows="4"></textarea>
-						</label>
-						<label class="submission_field" id="submission_address_label">
-							<span>Your tz Address</span>
-							<input
-								id="submission_address_input"
-								name="wallet_address"
-								type="text"
-								maxlength="120"
-								pattern="[A-Za-z0-9.]+"
-								title="Use letters, numbers and full stops only"
-								autocapitalize="none"
-								autocomplete="off"
-								spellcheck="false"
-								required />
-						</label>
-						<label class="submission_field" id="submission_editions_label">
-							<span>Editions</span>
-							<input id="submission_editions_input" name="editions" type="number" min="1" max="10000" step="1" value="1" required />
-						</label>
-						<label class="submission_honeypot" aria-hidden="true">
-							<span>Website</span>
-							<input name="website" type="text" tabindex="-1" autocomplete="off" />
-						</label>
-					</div>
-					<div class="submission_actions">
-						<button type="button" class="header_button" id="submission_cancel_button">Cancel</button>
-						<button type="submit" class="header_button" id="submission_submit_button">Submit</button>
-					</div>
-					<div id="submission_status" class="submission_status" role="status" aria-live="polite">Status: Fill in the form</div>
-					<canvas
-						id="submission_preview_canvas"
-						class="submission_preview_canvas"
-						width="400"
-						height="560"
-						role="img"
-						aria-label="Preview of the card being submitted"></canvas>
-				</form>
-			</dialog>
 		</div>
 	</body>
 
-	<script type="module" src="main.js"></script>
-	<script type="module" src="filters.js"></script>
+	<script src="stamps.js"></script>
+	<script src="audio.js"></script>
+	<script src="main.js"></script>
 </html>
