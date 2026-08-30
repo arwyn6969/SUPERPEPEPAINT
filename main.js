@@ -835,6 +835,16 @@
 		if (radio) radio.checked = true;
 		syncTransportUI();
 		showFeedbackNotification(STAMPS[i].name);
+		// Mario Paint style: picking an instrument says hello.
+		// Fixed reference pitch (the key's root, one octave up = row 7) so
+		// every voice previews consistently. Selection is always a user
+		// gesture, and capture mode never selects - determinism unharmed.
+		if (!BL.isCapture) {
+			try {
+				const c = SPPAudio.ctx();
+				SPPAudio.playNote(c, SPPAudio.bus(), STAMPS[i].synth, c.currentTime + 0.01, state.pitches[7], 0.85, stepDur(), SPPAudio.panFor(i));
+			} catch (err) { /* audio not available yet - stay silent */ }
+		}
 	}
 
 	function clearAll() {

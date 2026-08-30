@@ -187,7 +187,7 @@
 			tuneCode: code,
 			seed: BL.hash,
 			edition: BL.iteration,
-			app: { name: "SUPERPEPEPAINT", version: "1.1.1", repo: "https://github.com/arwyn6969/SUPERPEPEPAINT" },
+			app: { name: "SUPERPEPEPAINT", version: "1.1.2", repo: "https://github.com/arwyn6969/SUPERPEPEPAINT" },
 		};
 		const blob = new Blob([JSON.stringify(meta, null, 2) + "\n"], { type: "application/json" });
 		const ok = S.downloadBlob(blob, "SUPERPEPEPAINT_" + S.fileTag() + "_metadata.json");
