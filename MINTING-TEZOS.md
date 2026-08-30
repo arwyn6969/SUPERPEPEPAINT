@@ -5,7 +5,8 @@
 | | |
 | --- | --- |
 | Contract | [`KT1TFFL3BpiPya6NVUkbvpQb9d1PVU2ts5ZH`](https://tzkt.io/KT1TFFL3BpiPya6NVUkbvpQb9d1PVU2ts5ZH) |
-| Mint page (IPFS) | [`ipfs://QmNj24dkjAttpM9HtMgZTrkgrNT2N84RLx5obkVXF4mAXX/`](https://ipfs.io/ipfs/QmNj24dkjAttpM9HtMgZTrkgrNT2N84RLx5obkVXF4mAXX/) |
+| Mint page | [superpepepaint.mrarwyn.workers.dev](https://superpepepaint.mrarwyn.workers.dev/) |
+| Canonical app (on chain) | `ipfs://QmNj24dkjAttpM9HtMgZTrkgrNT2N84RLx5obkVXF4mAXX/` — what every token's artifactUri points at; the mint page above serves the identical build from Cloudflare because 2026 public IPFS gateways no longer render HTML for browsers |
 | Collection on objkt | [objkt.com/collections/KT1TFFL3…](https://objkt.com/collections/KT1TFFL3BpiPya6NVUkbvpQb9d1PVU2ts5ZH) |
 | Admin / creator / royalties | `tz1a13cp8xSdqYRoCXRrNiGgd233bNHpeNw5` (10%) |
 | Mint price | 10 tez (admin-adjustable via `set_mint_price`) |

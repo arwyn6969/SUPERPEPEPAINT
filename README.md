@@ -4,7 +4,7 @@ SUPERPEPEPAINT is a Mario Paint style music composer wearing PEPEPAINT's skin. P
 
 Three publishing paths from one codebase:
 
-- **The sovereign mint (Tezos edition)** — **LIVE ON MAINNET**: [`KT1TFFL3BpiPya6NVUkbvpQb9d1PVU2ts5ZH`](https://tzkt.io/KT1TFFL3BpiPya6NVUkbvpQb9d1PVU2ts5ZH) · [mint page (IPFS)](https://ipfs.io/ipfs/QmNj24dkjAttpM9HtMgZTrkgrNT2N84RLx5obkVXF4mAXX/) · [collection on objkt](https://objkt.com/collections/KT1TFFL3BpiPya6NVUkbvpQb9d1PVU2ts5ZH). The composer is the minting interface: compose inside the app, sign once, and the contract builds `artifactUri = app + tune code` on chain. 10 tez mint, 10% royalties. See **[MINTING-TEZOS.md](MINTING-TEZOS.md)**.
+- **The sovereign mint (Tezos edition)** — **LIVE ON MAINNET**: [`KT1TFFL3BpiPya6NVUkbvpQb9d1PVU2ts5ZH`](https://tzkt.io/KT1TFFL3BpiPya6NVUkbvpQb9d1PVU2ts5ZH) · [mint page](https://superpepepaint.mrarwyn.workers.dev/) · [collection on objkt](https://objkt.com/collections/KT1TFFL3BpiPya6NVUkbvpQb9d1PVU2ts5ZH). The composer is the minting interface: compose inside the app, sign once, and the contract builds `artifactUri = app + tune code` on chain. 10 tez mint, 10% royalties. See **[MINTING-TEZOS.md](MINTING-TEZOS.md)**.
 - **Manual objkt.com mint kit** — the MINT button produces a video artefact, cover, metadata and MIDI for a hand-made [objkt.com](https://objkt.com) mint.
 - **[bootloader.art](https://bootloader.art) generic web** (`boot:web@1.0.0`) — the self-contained seeded edition.
 
