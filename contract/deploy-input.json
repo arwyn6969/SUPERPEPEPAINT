@@ -1,0 +1,13 @@
+{
+	"rpc": "https://rpc.shadownet.teztnets.com",
+	"explorer": "https://shadownet.tzkt.io",
+	"network": "shadownet",
+	"admin": "",
+	"base_uri": "https://pub.hyperagent.com/p/whmExEsUvvKMBY8ni2egm-PZb5Q2JYsNBWDmYQEtkYU?tune=",
+	"mint_price_mutez": "500000",
+	"collection_name": "SUPERPEPEPAINT (SHADOWNET DRY RUN)",
+	"collection_description": "Mario Paint style meme music composer - the composer is the mint. Every token is a tune; artifactUri is built on chain from the canonical app plus the tune code. Testnet dry run of the sovereign participatory mint.",
+	"cover_uri": "https://pub.hyperagent.com/api/published/thumbnail/whmExEsUvvKMBY8ni2egm-PZb5Q2JYsNBWDmYQEtkYU",
+	"creators_json": "[\"tz1Ntt1zUmjKwBt6bbaUk8morfPhS5Zagktx\"]",
+	"royalties_json": "{\"decimals\":3,\"shares\":{\"tz1Ntt1zUmjKwBt6bbaUk8morfPhS5Zagktx\":100}}"
+}

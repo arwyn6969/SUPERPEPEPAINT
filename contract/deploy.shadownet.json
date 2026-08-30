@@ -1,0 +1,7 @@
+{
+	"contract": "KT1BxZP2KnckZiW9xMYiMQj9iJYfrxyCpD5R",
+	"network": "shadownet",
+	"rpc": "https://rpc.shadownet.teztnets.com",
+	"price_mutez": "500000",
+	"explorer": "https://shadownet.tzkt.io"
+}

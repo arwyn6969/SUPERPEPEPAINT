@@ -1,10 +1,18 @@
 {
 	"name": "superpepepaint",
-	"version": "1.1.2",
-	"description": "Mario Paint style music composer forked from PEPEPAINT V1, packaged for the bootloader.art generic-web runtime",
+	"version": "1.2.0",
+	"description": "Mario Paint style music composer forked from PEPEPAINT V1 - self-contained for bootloader.art, objkt manual minting, and a sovereign participatory Tezos mint where the composer is the minting interface",
 	"license": "MIT",
 	"scripts": {
 		"test": "node test/logic.test.cjs",
-		"zip": "mkdir -p dist && rm -f dist/superpepepaint.zip && zip -j dist/superpepepaint.zip index.html bootloader.js manifest.json styles.css stamps.js audio.js main.js mint.js LICENSE"
+		"zip": "mkdir -p dist && rm -f dist/superpepepaint.zip && zip -j dist/superpepepaint.zip index.html bootloader.js manifest.json styles.css stamps.js audio.js main.js mint.js LICENSE",
+		"zip:fx": "node tools/build-fxhash.cjs",
+		"zip:all": "npm run zip && npm run zip:fx && npm run zip:tez",
+		"zip:tez": "node tools/build-tezos.cjs"
+	},
+	"devDependencies": {
+		"@taquito/taquito": "^25.0.0",
+		"@taquito/signer": "^25.0.0",
+		"@taquito/utils": "^25.0.0"
 	}
 }

@@ -27,3 +27,10 @@ dist/
 
 # Inherited from upstream PEPEPAINT backend
 backend/var/
+
+# SmartPy scenario output (rebuild: python contract/superpepepaint_fa2.py)
+superpepepaint_fa2/
+
+# Throwaway deploy keys - never commit
+deploy_key.json
+*_key.json

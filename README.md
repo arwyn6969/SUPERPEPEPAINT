@@ -1,6 +1,12 @@
 # SUPERPEPEPAINT
 
-SUPERPEPEPAINT is a Mario Paint style music composer wearing PEPEPAINT's skin. Place meme stamps on a musical staff; every stamp is a synthesized instrument. The seed composes a deterministic starter tune, you take it from there — and when you're happy, the **MINT** button produces everything a wallet-signed [objkt.com](https://objkt.com) mint needs. The same self-contained build also satisfies the [bootloader.art](https://bootloader.art) generic-web runtime (`boot:web@1.0.0`), so both publishing paths stay open.
+SUPERPEPEPAINT is a Mario Paint style music composer wearing PEPEPAINT's skin. Place meme stamps on a musical staff; every stamp is a synthesized instrument. The seed composes a deterministic starter tune, you take it from there — and when you're happy, you mint.
+
+Three publishing paths from one codebase:
+
+- **The sovereign mint (Tezos edition)** — the headline act: your own FA2 collection contract where **the composer is the minting interface**. Collectors compose inside the app and sign once; the contract builds `artifactUri = app + tune code` on chain. Proven end-to-end on Shadownet, indexed by objkt. See **[MINTING-TEZOS.md](MINTING-TEZOS.md)**.
+- **Manual objkt.com mint kit** — the MINT button produces a video artefact, cover, metadata and MIDI for a hand-made [objkt.com](https://objkt.com) mint.
+- **[bootloader.art](https://bootloader.art) generic web** (`boot:web@1.0.0`) — the self-contained seeded edition.
 
 A fork of [PEPEPAINT V1](https://github.com/nathansonic/PEPEPAINT-V1) by Nathan Gregg (MIT). The unscii fonts, the green-on-white text-shadow chrome, the beveled buttons, the feedback popup, and all sixteen stamp sprites are inherited from PEPEPAINT's visual system in honored continuity — the drawing canvas just grew staff lines.
 
@@ -57,6 +63,14 @@ The wallet signature is the one step no app can do for you — objkt has no pref
 
 The whole app also satisfies objkt's **interactive token** rules (top-level `index.html`, relative refs, zero external requests), so `dist/superpepepaint.zip` can itself be minted as a playable interactive OBJKT if you ever want the instrument on-chain too.
 
+## The sovereign mint (Tezos edition)
+
+`npm run zip:tez` builds `dist/superpepepaint-tezos.zip`: the same app booted by `bootloader.js` (self-seeding), plus `tezos-mint.js` — viewer mode for minted tokens (`?tune=SPP1.…` in the URL applies the tune through the checksummed codec) and a Beacon wallet mint flow for composers. The FA2 contract (`contract/`) enforces the linkage on chain: it concatenates `base_uri + code` into `artifactUri` itself, so every token in the collection provably points at the canonical app playing that exact tune. Full architecture, live Shadownet dry-run evidence and the mainnet runbook: **[MINTING-TEZOS.md](MINTING-TEZOS.md)**.
+
+## The fx(hash) edition (shelved with honors)
+
+`npm run zip:fx` builds `dist/superpepepaint-fxhash.zip` — a complete fx(params) edition where the composer ran inside fxhash's minting UI and synced every edit into a 352-byte code-driven bytes param (`fxhash-adapter.js`, verified against the official snippet in the test suite). It was finished and browser-verified on 2026-08-30 — twelve days after fxhash permanently shut down (2026-08-17), which we discovered at the sandbox-test gate. It ships as engineering record; the sovereign Tezos edition above is its successor and improves on it (no platform to die).
+
 ## Publish to bootloader.art (still supported)
 
 The published artifact is a zip of exactly these files:
@@ -83,7 +97,7 @@ Then on [bootloader.art/create](https://bootloader.art/create) choose **Generic 
 
 ## Repository layout
 
-Beyond the artifact files above: `dev.html` (seed lab), `test/logic.test.cjs` (`node test/logic.test.cjs` — boots the real `bootloader.js` + `main.js` in a stub DOM and checks determinism and composer invariants across 120 seeds), and the inherited `brushes/` + `fonts/` directories from upstream PEPEPAINT, which are the source art the stamp sprites and subset fonts were derived from. Upstream's drawing-app files (`filters.js`, `traits.js`, `backend/`, `greenpaper/`) are not used by SUPERPEPEPAINT.
+Beyond the artifact files above: `dev.html` (seed lab); `test/logic.test.cjs` (`node test/logic.test.cjs` — boots the real `bootloader.js` + `main.js` in a stub DOM and checks determinism and composer invariants across 120 seeds, then boots the fx(hash) edition against the real snippet, then the Tezos edition including a golden Micheline cross-check against Taquito's encoding — 30k+ checks); `contract/` (the FA2 sovereign-mint contract, compiled build, deploy + live-E2E scripts); `tezos-mint.js`, `fxhash-adapter.js`, `fxhash.min.js` (edition glue); `tools/` (edition build scripts); and the inherited `brushes/` + `fonts/` directories from upstream PEPEPAINT, which are the source art the stamp sprites and subset fonts were derived from. Upstream's drawing-app files (`filters.js`, `traits.js`, `backend/`, `greenpaper/`) are not used by SUPERPEPEPAINT.
 
 ## Credits & license
 
