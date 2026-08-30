@@ -1,5 +1,19 @@
 # The sovereign mint — SUPERPEPEPAINT on Tezos
 
+## 🟢 LIVE ON MAINNET (2026-08-30)
+
+| | |
+| --- | --- |
+| Contract | [`KT1TFFL3BpiPya6NVUkbvpQb9d1PVU2ts5ZH`](https://tzkt.io/KT1TFFL3BpiPya6NVUkbvpQb9d1PVU2ts5ZH) |
+| Mint page (IPFS) | [`ipfs://QmNj24dkjAttpM9HtMgZTrkgrNT2N84RLx5obkVXF4mAXX/`](https://ipfs.io/ipfs/QmNj24dkjAttpM9HtMgZTrkgrNT2N84RLx5obkVXF4mAXX/) |
+| Collection on objkt | [objkt.com/collections/KT1TFFL3…](https://objkt.com/collections/KT1TFFL3BpiPya6NVUkbvpQb9d1PVU2ts5ZH) |
+| Admin / creator / royalties | `tz1a13cp8xSdqYRoCXRrNiGgd233bNHpeNw5` (10%) |
+| Mint price | 10 tez (admin-adjustable via `set_mint_price`) |
+
+Compose in the app → **⛏ MINT THIS TUNE** → sign. That's the whole flow.
+
+---
+
 The composer is the minting interface. Your collection lives in **your own FA2
 contract**; collectors compose a tune inside the app, click **⛏ MINT THIS
 TUNE**, sign once with their wallet, and the contract mints their tune as a
