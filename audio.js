@@ -114,8 +114,8 @@ var SPPAudio = (function () {
 			bp.type = "bandpass";
 			bp.frequency.setValueAtTime(f * 2.4, t);
 			bp.frequency.linearRampToValueAtTime(f * 1.4, end);
-			bp.Q.value = 3.2;
-			const g = gainEnv(c, t, 0.012, 0.52 * v, 0.001, end);
+			bp.Q.value = 2.4;
+			const g = gainEnv(c, t, 0.012, 0.72 * v, 0.001, end);
 			o.connect(bp);
 			bp.connect(g);
 			g.connect(out);
@@ -175,7 +175,7 @@ var SPPAudio = (function () {
 				const hp = c.createBiquadFilter();
 				hp.type = "highpass";
 				hp.frequency.value = 700;
-				const g = gainEnv(c, t0, 0.003, 0.3 * v, 0.001, end);
+				const g = gainEnv(c, t0, 0.003, 0.38 * v, 0.001, end);
 				o.connect(hp);
 				hp.connect(g);
 				g.connect(out);
@@ -223,7 +223,7 @@ var SPPAudio = (function () {
 			lg.gain.value = 420;
 			lfo.connect(lg);
 			lg.connect(lp.frequency);
-			const g = gainEnv(c, t, 0.015, 0.26 * v, 0.001, end);
+			const g = gainEnv(c, t, 0.015, 0.33 * v, 0.001, end);
 			o1.connect(lp);
 			o2.connect(lp);
 			lp.connect(g);
@@ -238,7 +238,7 @@ var SPPAudio = (function () {
 			const g2 = c.createGain();
 			g2.gain.value = 0.35;
 			o2.connect(g2);
-			const g = gainEnv(c, t, 0.003, 0.34 * v, 0.001, end);
+			const g = gainEnv(c, t, 0.003, 0.42 * v, 0.001, end);
 			o1.connect(g);
 			g2.connect(g);
 			g.connect(out);
@@ -267,8 +267,8 @@ var SPPAudio = (function () {
 			const o = osc(c, "square", f, t, end + 0.01);
 			const g = c.createGain();
 			g.gain.setValueAtTime(0.0001, t);
-			g.gain.linearRampToValueAtTime(0.24 * v, t + 0.005);
-			g.gain.setValueAtTime(0.24 * v, end - 0.005);
+			g.gain.linearRampToValueAtTime(0.3 * v, t + 0.005);
+			g.gain.setValueAtTime(0.3 * v, end - 0.005);
 			g.gain.linearRampToValueAtTime(0.0001, end);
 			o.connect(g);
 			g.connect(out);
@@ -310,12 +310,12 @@ var SPPAudio = (function () {
 
 		// SUN - hi-hat tick. row pitch sets brightness.
 		hat: function (c, out, t, f, v) {
-			const end = t + 0.055;
+			const end = t + 0.07;
 			const n = noiseSrc(c, t, end + 0.01);
 			const hp = c.createBiquadFilter();
 			hp.type = "highpass";
 			hp.frequency.value = 4200 + f * 2.5;
-			const g = gainEnv(c, t, 0.001, 0.2 * v, 0.001, end);
+			const g = gainEnv(c, t, 0.001, 0.34 * v, 0.001, end);
 			n.connect(hp);
 			hp.connect(g);
 			g.connect(out);
