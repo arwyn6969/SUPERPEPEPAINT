@@ -148,7 +148,7 @@
 				if (row && row.classList && row.classList.contains("mint_row")) {
 					// swap the objkt link row for the mint button + status
 					row.innerHTML = "";
-					if (CONFIGURED && !viewer_applied) {
+					if (CONFIGURED) {
 						const btn = document.createElement("button");
 						btn.type = "button";
 						btn.className = "header_button";
@@ -163,8 +163,8 @@
 					status_el.setAttribute("role", "status");
 					status_el.setAttribute("aria-live", "polite");
 					row.appendChild(status_el);
-					if (viewer_applied) {
-						setStatus("THIS IS A MINTED TUNE - REMIX IT AND MINT YOUR OWN FROM THE BARE APP URL");
+					if (CONFIGURED && viewer_applied) {
+						setStatus("MINTED TUNE LOADED - MINTING CREATES YOUR OWN NEW TOKEN OF IT (REMIX FIRST TO MAKE IT YOURS) · " + (Number(CONFIG.price_mutez) / 1000000) + " TEZ + FEES");
 					} else if (CONFIGURED) {
 						setStatus("PRICE: " + (Number(CONFIG.price_mutez) / 1000000) + " TEZ + FEES · " + CONFIG.network.toUpperCase());
 					}
