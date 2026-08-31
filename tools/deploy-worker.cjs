@@ -53,6 +53,19 @@ addEventListener("fetch", (event) => {
   const url = new URL(req.url);
   let p = url.pathname;
   if (p === "/" || p === "") p = "/index.html";
+  if (p === "/walletbeacon.min.js") {
+    // same-origin Beacon SDK: proxied + edge-cached from the pinned CDN build,
+    // so mobile webviews that block third-party scripts still get the wallet SDK
+    event.respondWith(
+      fetch("https://cdn.jsdelivr.net/npm/@airgap/beacon-sdk@4.8.1/dist/walletbeacon.min.js", {
+        cf: { cacheEverything: true, cacheTtl: 604800 }
+      }).then((r) => {
+        if (!r.ok) return new Response("sdk upstream error", { status: 502, headers: CORS });
+        return new Response(r.body, { headers: Object.assign({ "content-type": "application/javascript; charset=utf-8", "cache-control": "public, max-age=604800" }, CORS) });
+      }).catch(() => new Response("sdk fetch failed", { status: 502, headers: CORS }))
+    );
+    return;
+  }
   const f = FILES[p];
   if (!f) {
     event.respondWith(new Response("not found", { status: 404, headers: CORS }));

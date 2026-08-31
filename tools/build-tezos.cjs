@@ -34,6 +34,7 @@ const stamps = {
 	__SPP_RPC__: cfg.rpc,
 	__SPP_PRICE__: cfg.price_mutez,
 	__SPP_EXPLORER__: cfg.explorer,
+	__SPP_PAGE__: cfg.page || "",
 };
 for (const [ph, val] of Object.entries(stamps)) {
 	if (glue.indexOf(ph) === -1) throw new Error("tezos-mint.js missing placeholder " + ph);

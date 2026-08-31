@@ -497,7 +497,8 @@ const UNIFORM_KEYS = ["Tempo (BPM)", "Key", "Mood", "Swing", "Stamps (num)", "Cr
 		.map((f) => fs.readFileSync(path.join(ROOT, f), "utf8"))
 		.concat([fs.readFileSync(TZ_STAGE, "utf8")]);
 
-	function bootWorldTZ(search) {
+	function bootWorldTZ(search, opts) {
+		opts = opts || {};
 		const elements = {};
 		const documentStub = {
 			referrer: "",
@@ -525,7 +526,9 @@ const UNIFORM_KEYS = ["Tempo (BPM)", "Key", "Mood", "Swing", "Stamps (num)", "Cr
 			clearInterval() {},
 			setTimeout() { return 0; },
 			clearTimeout() {},
-			localStorage: { getItem() { return null; }, setItem() {}, removeItem() {} },
+			localStorage: opts.storageThrows
+				? { getItem() { throw new Error("blocked"); }, setItem() { throw new Error("blocked"); }, removeItem() { throw new Error("blocked"); } }
+				: { getItem() { return null; }, setItem() {}, removeItem() {} },
 			Image: function () { this.src = ""; },
 			Promise, JSON, Math, Date,
 			URL: { createObjectURL() { return ""; }, revokeObjectURL() {} },
@@ -550,6 +553,9 @@ const UNIFORM_KEYS = ["Tempo (BPM)", "Key", "Mood", "Swing", "Stamps (num)", "Cr
 		sandbox.window = sandbox;
 		sandbox.self = sandbox;
 		sandbox.parent = sandbox;
+		sandbox.top = opts.framed ? { __not_self: true } : sandbox;
+		sandbox.location.origin = "https://test.local";
+		sandbox.location.pathname = "/";
 		vm.createContext(sandbox);
 		for (const src of TZSRC) vm.runInContext(src, sandbox);
 		return sandbox;
@@ -615,6 +621,30 @@ const UNIFORM_KEYS = ["Tempo (BPM)", "Key", "Mood", "Swing", "Stamps (num)", "Cr
 		const a = bootWorldTZ("?s=" + TZ_SEED);
 		const b = bootWorldTZ("?s=" + TZ_SEED);
 		assert(JSON.stringify(a.SPP.getTuneData()) === JSON.stringify(b.SPP.getTuneData()), "tz: seed determinism intact with glue loaded");
+	}
+
+	// TZ7: restricted wallet environments (objkt preview iframe, storage-blocked
+	// webviews) are detected and the mint escape hatch carries the exact tune
+	{
+		const plain = bootWorldTZ("?s=" + TZ_SEED);
+		assert(plain.SPPTEZ.walletEnvBlocked() === null, "tz: top-level page with storage is not blocked");
+
+		const framed = bootWorldTZ("?s=" + TZ_SEED, { framed: true });
+		assert(framed.SPPTEZ.walletEnvBlocked() === "EMBEDDED VIEW", "tz: iframe detected as EMBEDDED VIEW");
+
+		const noStore = bootWorldTZ("?s=" + TZ_SEED, { storageThrows: true });
+		assert(noStore.SPPTEZ.walletEnvBlocked() === "BLOCKED STORAGE", "tz: storage-throwing webview detected as BLOCKED STORAGE");
+
+		const both = bootWorldTZ("?s=" + TZ_SEED, { framed: true, storageThrows: true });
+		assert(both.SPPTEZ.walletEnvBlocked() === "SANDBOXED PREVIEW", "tz: sandboxed iframe (storage + framed) detected as SANDBOXED PREVIEW");
+
+		const withTune = bootWorldTZ("?s=" + TZ_SEED + "&tune=" + CODE_FXPARITY, { framed: true });
+		const url = withTune.SPPTEZ.mintLinkOutUrl();
+		const expected_code = withTune.SPPMINT.encodeTune(withTune.SPP.getTuneData());
+		assert(url.indexOf("?tune=" + expected_code) !== -1, "tz: link-out URL carries the current tune code");
+		assert(expected_code === CODE_FXPARITY, "tz: link-out code round-trips the viewer tune exactly");
+		const stampedPage = withTune.SPPTEZ.config.page;
+		assert(stampedPage.indexOf("__SPP_") === 0 ? url.indexOf("https://test.local/") === 0 : url.indexOf(stampedPage) === 0, "tz: link-out URL uses stamped page (or location fallback when unstamped)");
 	}
 
 	console.log("");

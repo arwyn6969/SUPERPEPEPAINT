@@ -3,5 +3,6 @@
 	"network": "mainnet",
 	"rpc": "https://rpc.tzkt.io/mainnet",
 	"price_mutez": "10000000",
-	"explorer": "https://tzkt.io"
+	"explorer": "https://tzkt.io",
+	"page": "https://superpepepaint.mrarwyn.workers.dev/"
 }

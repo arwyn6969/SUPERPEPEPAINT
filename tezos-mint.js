@@ -27,9 +27,26 @@
 		rpc: "__SPP_RPC__",
 		price_mutez: "__SPP_PRICE__",
 		explorer: "__SPP_EXPLORER__", // e.g. https://shadownet.tzkt.io
+		page: "__SPP_PAGE__", // canonical mint page, e.g. https://…workers.dev/
 	};
 	const CONFIGURED = CONFIG.contract.indexOf("KT1") === 0;
-	const BEACON_CDN = "https://cdn.jsdelivr.net/npm/@airgap/beacon-sdk@4/dist/walletbeacon.min.js";
+	// pinned: the exact bundle version this build was tested against
+	const BEACON_CDN = "https://cdn.jsdelivr.net/npm/@airgap/beacon-sdk@4.8.1/dist/walletbeacon.min.js";
+
+	// Wallets cannot connect from restricted environments: sandboxed iframes
+	// (objkt's embedded live view) and webviews that block storage make the
+	// Beacon SDK crash during init ("beacon global missing"). Detect those and
+	// route the collector to the full app instead of a dead mint button.
+	function walletEnvBlocked() {
+		let framed = false;
+		try { framed = window.top !== window.self; } catch (err) { framed = true; }
+		try {
+			window.localStorage.setItem("__spp_probe", "1");
+			window.localStorage.removeItem("__spp_probe");
+		} catch (err) { return framed ? "SANDBOXED PREVIEW" : "BLOCKED STORAGE"; }
+		if (framed) return "EMBEDDED VIEW";
+		return null;
+	}
 
 	const SPP = window.SPP;
 	const SM = window.SPPMINT;
@@ -129,6 +146,24 @@
 		if (status_el) status_el.textContent = text;
 	}
 
+	function pageLabel() {
+		return !CONFIG.page || CONFIG.page.indexOf("__SPP_") === 0 ? "THE APP" : CONFIG.page;
+	}
+
+	// the full app URL carrying the CURRENT composition - used to escape
+	// restricted environments (objkt preview iframe, storage-blocked webviews)
+	function mintLinkOutUrl() {
+		let page = CONFIG.page;
+		if (!page || page.indexOf("__SPP_") === 0) {
+			try { page = window.location.origin + window.location.pathname; } catch (err) { page = ""; }
+		}
+		try {
+			return page + "?tune=" + SM.encodeTune(SPP.getTuneData());
+		} catch (err) {
+			return page;
+		}
+	}
+
 	function retitleMintDialog() {
 		try {
 			const steps = document.querySelectorAll(".mint_step");
@@ -148,13 +183,22 @@
 				if (row && row.classList && row.classList.contains("mint_row")) {
 					// swap the objkt link row for the mint button + status
 					row.innerHTML = "";
+					const blocked = CONFIGURED ? walletEnvBlocked() : null;
 					if (CONFIGURED) {
 						const btn = document.createElement("button");
 						btn.type = "button";
 						btn.className = "header_button";
 						btn.id = "tezos_mint_button";
-						btn.textContent = "⛏ MINT THIS TUNE";
-						btn.addEventListener("click", startMint);
+						if (blocked) {
+							btn.textContent = "⛏ OPEN THE APP TO MINT";
+							btn.addEventListener("click", () => {
+								try { window.open(mintLinkOutUrl(), "_blank", "noopener"); } catch (err) { /* popup blocked */ }
+								setStatus("IF NOTHING OPENED, COPY THE TUNE CODE ABOVE AND IMPORT IT AT " + pageLabel());
+							});
+						} else {
+							btn.textContent = "⛏ MINT THIS TUNE";
+							btn.addEventListener("click", startMint);
+						}
 						row.appendChild(btn);
 					}
 					status_el = document.createElement("span");
@@ -163,7 +207,9 @@
 					status_el.setAttribute("role", "status");
 					status_el.setAttribute("aria-live", "polite");
 					row.appendChild(status_el);
-					if (CONFIGURED && viewer_applied) {
+					if (blocked) {
+						setStatus("WALLETS CAN'T CONNECT INSIDE THIS " + blocked + " - THE BUTTON OPENS THE FULL APP WITH THIS EXACT TUNE · " + (Number(CONFIG.price_mutez) / 1000000) + " TEZ + FEES");
+					} else if (CONFIGURED && viewer_applied) {
 						setStatus("MINTED TUNE LOADED - MINTING CREATES YOUR OWN NEW TOKEN OF IT (REMIX FIRST TO MAKE IT YOURS) · " + (Number(CONFIG.price_mutez) / 1000000) + " TEZ + FEES");
 					} else if (CONFIGURED) {
 						setStatus("PRICE: " + (Number(CONFIG.price_mutez) / 1000000) + " TEZ + FEES · " + CONFIG.network.toUpperCase());
@@ -184,11 +230,41 @@
 	function loadBeacon() {
 		return new Promise((resolve, reject) => {
 			if (window.beacon && window.beacon.DAppClient) return resolve(window.beacon);
-			const s = document.createElement("script");
-			s.src = BEACON_CDN;
-			s.onload = () => (window.beacon && window.beacon.DAppClient ? resolve(window.beacon) : reject(new Error("beacon global missing")));
-			s.onerror = () => reject(new Error("could not load wallet sdk"));
-			document.head.appendChild(s);
+			const env = walletEnvBlocked();
+			if (env) return reject(new Error("wallets can't connect inside this " + env.toLowerCase() + " - open " + pageLabel() + " directly"));
+
+			// capture the SDK's own crash (e.g. storage access throwing inside
+			// the bundle) so remote bug reports carry the real cause
+			let sdk_err = null;
+			const onerr = (ev) => {
+				if (ev && ev.filename && ev.filename.indexOf("walletbeacon") !== -1) sdk_err = ev.message || "sdk internal error";
+			};
+			let settled = false;
+			const finish = (beaconObj, err) => {
+				if (settled) return;
+				settled = true;
+				clearTimeout(timer);
+				try { window.removeEventListener("error", onerr); } catch (e2) { /* stub DOM */ }
+				beaconObj ? resolve(beaconObj) : reject(err);
+			};
+			const timer = setTimeout(() => finish(null, new Error("wallet sdk timed out - check your connection and try again")), 25000);
+			try { window.addEventListener("error", onerr); } catch (e2) { /* stub DOM */ }
+
+			const failMsg = () => new Error(sdk_err ? "wallet sdk crashed: " + sdk_err : "beacon global missing after load - try a regular browser");
+			const tryLoad = (src, fallback) => {
+				const s = document.createElement("script");
+				s.src = src;
+				s.onload = () => {
+					if (window.beacon && window.beacon.DAppClient) finish(window.beacon, null);
+					else if (fallback) fallback();
+					else finish(null, failMsg());
+				};
+				s.onerror = () => (fallback ? fallback() : finish(null, sdk_err ? failMsg() : new Error("could not load wallet sdk - check your connection")));
+				document.head.appendChild(s);
+			};
+			// same-origin copy first (served by the mint page host - immune to
+			// CDN blocking in mobile webviews), then the pinned CDN bundle
+			tryLoad("walletbeacon.min.js", () => tryLoad(BEACON_CDN, null));
 		});
 	}
 
@@ -309,5 +385,7 @@
 		tuneAttributesJson: tuneAttributesJson,
 		tuneDescription: tuneDescription,
 		startMint: startMint,
+		walletEnvBlocked: walletEnvBlocked,
+		mintLinkOutUrl: mintLinkOutUrl,
 	};
 })();

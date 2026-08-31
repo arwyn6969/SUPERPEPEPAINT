@@ -169,6 +169,24 @@ longer serves HTML to browsers). That mirror runs automatically for
 established contracts (hicetnunc, fxhash); for brand-new collections it may
 need a nudge via objkt support.
 
+## Minting from mobile wallets and embedded previews (hard-won lessons)
+
+- **Wallets cannot connect from restricted environments.** objkt's embedded
+  live view runs in a sandboxed iframe, and some mobile in-app browsers block
+  storage — the Beacon SDK crashes during init there (the old symptom:
+  `MINT STOPPED: beacon global missing`). The app now detects both cases
+  (`walletEnvBlocked()`) and swaps the mint button for **⛏ OPEN THE APP TO
+  MINT**, which opens the full app carrying the exact current tune
+  (`page + ?tune=<code>`, stamped from `deploy.json`'s `page` field).
+- **The Beacon SDK loads same-origin first.** The worker serves
+  `/walletbeacon.min.js` as an edge-cached proxy of the pinned
+  `@airgap/beacon-sdk@4.8.1` bundle, with the jsDelivr CDN as the in-app
+  fallback — webviews that block third-party scripts still get the SDK, and
+  IPFS/local builds degrade to the CDN automatically.
+- **SDK crashes now self-report.** The loader captures the bundle's own
+  error and surfaces it in the status line (`wallet sdk crashed: …`), so a
+  mobile bug report carries the real cause instead of a generic failure.
+
 ## Files
 
 
