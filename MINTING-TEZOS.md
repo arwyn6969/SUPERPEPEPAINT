@@ -149,7 +149,28 @@ Tell collectors one URL: the app. Compose → mint → done.
 
 Minted tokens are immutable — admin changes only affect future mints.
 
+## Hosting requirements for https artifacts (hard-won lessons)
+
+If `base_uri` points at an **https** host (like the Cloudflare worker), that host
+**MUST send CORS headers** — objkt's frontend `fetch()`es the artifact URL
+cross-origin from `https://objkt.com` before embedding it, and without
+`Access-Control-Allow-Origin` the pane shows *"unable to load asset"*:
+
+```
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Methods: GET, HEAD, OPTIONS
+```
+
+`tools/deploy-worker.cjs` emits the worker source with these baked in.
+
+If `base_uri` points at **ipfs://** instead, objkt must mirror the CID into
+`assets.objkt.media` before the live view works (the raw ipfs.io fallback no
+longer serves HTML to browsers). That mirror runs automatically for
+established contracts (hicetnunc, fxhash); for brand-new collections it may
+need a nudge via objkt support.
+
 ## Files
+
 
 ```text
 contract/superpepepaint_fa2.py      SmartPy source + full scenario suite
