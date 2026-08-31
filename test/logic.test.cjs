@@ -630,13 +630,13 @@ const UNIFORM_KEYS = ["Tempo (BPM)", "Key", "Mood", "Swing", "Stamps (num)", "Cr
 		assert(plain.SPPTEZ.walletEnvBlocked() === null, "tz: top-level page with storage is not blocked");
 
 		const framed = bootWorldTZ("?s=" + TZ_SEED, { framed: true });
-		assert(framed.SPPTEZ.walletEnvBlocked() === "EMBEDDED VIEW", "tz: iframe detected as EMBEDDED VIEW");
+		assert(framed.SPPTEZ.walletEnvBlocked() === null, "tz: frame with WORKING storage is not blocked (beacon works there)");
 
 		const noStore = bootWorldTZ("?s=" + TZ_SEED, { storageThrows: true });
-		assert(noStore.SPPTEZ.walletEnvBlocked() === "BLOCKED STORAGE", "tz: storage-throwing webview detected as BLOCKED STORAGE");
+		assert(noStore.SPPTEZ.walletEnvBlocked() === "RESTRICTED BROWSER STORAGE", "tz: storage-throwing webview detected as RESTRICTED BROWSER STORAGE");
 
 		const both = bootWorldTZ("?s=" + TZ_SEED, { framed: true, storageThrows: true });
-		assert(both.SPPTEZ.walletEnvBlocked() === "SANDBOXED PREVIEW", "tz: sandboxed iframe (storage + framed) detected as SANDBOXED PREVIEW");
+		assert(both.SPPTEZ.walletEnvBlocked() === "SANDBOXED PREVIEW", "tz: sandboxed iframe (framed + blocked storage) detected as SANDBOXED PREVIEW");
 
 		const withTune = bootWorldTZ("?s=" + TZ_SEED + "&tune=" + CODE_FXPARITY, { framed: true });
 		const url = withTune.SPPTEZ.mintLinkOutUrl();

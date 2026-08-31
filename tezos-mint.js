@@ -33,18 +33,18 @@
 	// pinned: the exact bundle version this build was tested against
 	const BEACON_CDN = "https://cdn.jsdelivr.net/npm/@airgap/beacon-sdk@4.8.1/dist/walletbeacon.min.js";
 
-	// Wallets cannot connect from restricted environments: sandboxed iframes
-	// (objkt's embedded live view) and webviews that block storage make the
-	// Beacon SDK crash during init ("beacon global missing"). Detect those and
-	// route the collector to the full app instead of a dead mint button.
+	// Wallet SDKs crash in restricted environments: sandboxed iframes (objkt's
+	// embedded live view) and webviews that block storage kill the Beacon SDK
+	// during init ("beacon global missing"). Detect exactly that - blocked
+	// storage. A frame with WORKING storage runs Beacon fine, so framing alone
+	// is not a blocker (in-wallet browsers sometimes wrap pages).
 	function walletEnvBlocked() {
 		let framed = false;
 		try { framed = window.top !== window.self; } catch (err) { framed = true; }
 		try {
 			window.localStorage.setItem("__spp_probe", "1");
 			window.localStorage.removeItem("__spp_probe");
-		} catch (err) { return framed ? "SANDBOXED PREVIEW" : "BLOCKED STORAGE"; }
-		if (framed) return "EMBEDDED VIEW";
+		} catch (err) { return framed ? "SANDBOXED PREVIEW" : "RESTRICTED BROWSER STORAGE"; }
 		return null;
 	}
 
@@ -184,21 +184,30 @@
 					// swap the objkt link row for the mint button + status
 					row.innerHTML = "";
 					const blocked = CONFIGURED ? walletEnvBlocked() : null;
-					if (CONFIGURED) {
+					if (CONFIGURED && blocked) {
+						// a REAL link, not window.open - webviews and wallet browsers
+						// block popups but allow user-tap navigation; long-press works too
+						const a = document.createElement("a");
+						a.className = "header_button";
+						a.id = "tezos_mint_button";
+						a.textContent = "⛏ OPEN THE APP TO MINT";
+						a.href = mintLinkOutUrl();
+						a.target = "_blank";
+						a.rel = "noopener noreferrer";
+						a.style.textDecoration = "none";
+						a.style.display = "inline-block";
+						const refresh = () => { try { a.href = mintLinkOutUrl(); } catch (err) { /* keep last */ } };
+						a.addEventListener("touchstart", refresh, { passive: true });
+						a.addEventListener("mousedown", refresh);
+						a.addEventListener("click", refresh);
+						row.appendChild(a);
+					} else if (CONFIGURED) {
 						const btn = document.createElement("button");
 						btn.type = "button";
 						btn.className = "header_button";
 						btn.id = "tezos_mint_button";
-						if (blocked) {
-							btn.textContent = "⛏ OPEN THE APP TO MINT";
-							btn.addEventListener("click", () => {
-								try { window.open(mintLinkOutUrl(), "_blank", "noopener"); } catch (err) { /* popup blocked */ }
-								setStatus("IF NOTHING OPENED, COPY THE TUNE CODE ABOVE AND IMPORT IT AT " + pageLabel());
-							});
-						} else {
-							btn.textContent = "⛏ MINT THIS TUNE";
-							btn.addEventListener("click", startMint);
-						}
+						btn.textContent = "⛏ MINT THIS TUNE";
+						btn.addEventListener("click", startMint);
 						row.appendChild(btn);
 					}
 					status_el = document.createElement("span");
@@ -208,7 +217,7 @@
 					status_el.setAttribute("aria-live", "polite");
 					row.appendChild(status_el);
 					if (blocked) {
-						setStatus("WALLETS CAN'T CONNECT INSIDE THIS " + blocked + " - THE BUTTON OPENS THE FULL APP WITH THIS EXACT TUNE · " + (Number(CONFIG.price_mutez) / 1000000) + " TEZ + FEES");
+						setStatus("WALLET SDKS CRASH IN THIS " + blocked + " - THE LINK OPENS THE FULL APP WITH THIS EXACT TUNE (OR LONG-PRESS IT TO COPY THE ADDRESS) · " + (Number(CONFIG.price_mutez) / 1000000) + " TEZ + FEES");
 					} else if (CONFIGURED && viewer_applied) {
 						setStatus("MINTED TUNE LOADED - MINTING CREATES YOUR OWN NEW TOKEN OF IT (REMIX FIRST TO MAKE IT YOURS) · " + (Number(CONFIG.price_mutez) / 1000000) + " TEZ + FEES");
 					} else if (CONFIGURED) {
