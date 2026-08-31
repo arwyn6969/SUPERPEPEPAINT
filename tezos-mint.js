@@ -245,6 +245,60 @@
 		minting = false;
 	}
 
+	////////////////////
+	//   ADMIN OPS    //
+	////////////////////
+
+	// one-button admin signer: open /?setbase=<url-encoded new base uri>
+	// (the contract rejects non-admin senders, so this is safe to expose)
+	const setbase_param = qs.get("setbase");
+	if (setbase_param && CONFIGURED) {
+		try {
+			const panel = document.createElement("div");
+			panel.id = "tezos_admin_panel";
+			panel.setAttribute(
+				"style",
+				"position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:9999999;" +
+					"background:#ffffff;border:4px ridge #0b7a0b;padding:10px 14px;max-width:82vw;" +
+					'font-family:"unscii8",monospace;color:#0b7a0b;font-size:13px;text-align:center;'
+			);
+			panel.innerHTML =
+				'<div style="font-weight:bold;margin-bottom:6px;">ADMIN · SET_BASE_URI</div>' +
+				'<div id="tezos_admin_target" style="word-break:break-all;margin-bottom:8px;"></div>' +
+				'<button type="button" class="header_button" id="tezos_admin_sign">SIGN WITH ADMIN WALLET</button>' +
+				'<div id="tezos_admin_status" style="margin-top:6px;">&nbsp;</div>';
+			document.body.appendChild(panel);
+			document.getElementById("tezos_admin_target").textContent = setbase_param;
+			const admin_status = document.getElementById("tezos_admin_status");
+			document.getElementById("tezos_admin_sign").addEventListener("click", async () => {
+				try {
+					admin_status.textContent = "LOADING WALLET SDK…";
+					const beacon = await loadBeacon();
+					if (!beacon_client) {
+						beacon_client = new beacon.DAppClient({ name: "SUPERPEPEPAINT", network: beaconNetwork() });
+					}
+					const active = await beacon_client.getActiveAccount();
+					if (!active) await beacon_client.requestPermissions();
+					admin_status.textContent = "CONFIRM IN YOUR WALLET…";
+					const result = await beacon_client.requestOperation({
+						operationDetails: [
+							{
+								kind: "transaction",
+								destination: CONFIG.contract,
+								amount: "0",
+								parameters: { entrypoint: "set_base_uri", value: { bytes: utf8hex(setbase_param) } },
+							},
+						],
+					});
+					const hash = result && (result.transactionHash || result.operationHash || result.opHash);
+					admin_status.textContent = "DONE ✓ " + (hash ? String(hash).slice(0, 16) + "…" : "OPERATION SENT");
+				} catch (err) {
+					admin_status.textContent = "STOPPED: " + String(err && err.message ? err.message : err).slice(0, 110);
+				}
+			});
+		} catch (err) { /* stub DOMs without a body are fine */ }
+	}
+
 	// small window for the test suite and tinkerers
 	window.SPPTEZ = {
 		config: CONFIG,
