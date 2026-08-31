@@ -210,15 +210,16 @@
 			setStatus("LOADING WALLET SDK…");
 			const beacon = await loadBeacon();
 			if (!beacon_client) {
+				// beacon v4: the network is set on the client, not per request
 				beacon_client = new beacon.DAppClient({
 					name: "SUPERPEPEPAINT",
-					preferredNetwork: CONFIG.network === "mainnet" ? "mainnet" : undefined,
+					network: beaconNetwork(),
 				});
 			}
 			setStatus("CONNECT YOUR WALLET…");
 			const active = await beacon_client.getActiveAccount();
 			if (!active) {
-				await beacon_client.requestPermissions({ network: beaconNetwork() });
+				await beacon_client.requestPermissions();
 			}
 			setStatus("CONFIRM THE MINT IN YOUR WALLET…");
 			const result = await beacon_client.requestOperation({
